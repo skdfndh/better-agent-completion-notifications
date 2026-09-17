@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendFile, mkdtemp, rm } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { NdjsonEventStreamer, resolveWorkspaceEventLogPath } from "../src/ui/server.js";
@@ -62,3 +62,31 @@ test("UI 服务器能够正确托管独立弹窗 popup.html 与 popup.js", async
   }
 });
 
+test("活跃工作台会写入带有过期时间的展示心跳", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-reminder-presence-"));
+  const eventLogPath = join(directory, "events.ndjson");
+  const workbenchPresencePath = join(directory, "workbench-presence.json");
+  const { createReminderUiServer } = await import("../src/ui/server.js");
+
+  const app = await createReminderUiServer({ eventLogPath, workbenchPresencePath });
+  const server = app.server;
+  await new Promise((res) => server.listen(0, "127.0.0.1", res));
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 3300;
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/workbench-presence`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: true }),
+    });
+    assert.equal(response.status, 200);
+
+    const presence = JSON.parse(await readFile(workbenchPresencePath, "utf8"));
+    assert.equal(presence.active, true);
+    assert.ok(Date.parse(presence.expiresAt) > Date.now());
+  } finally {
+    await new Promise((res) => server.close(res));
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -127,6 +127,18 @@ function connectEventStream() {
   });
 }
 
+function reportWorkbenchPresence() {
+  if (document.visibilityState !== "visible") return;
+
+  fetch("/api/workbench-presence", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ active: true }),
+  }).catch(() => {
+    // 工作台状态上报失败不影响本地设置与事件流。
+  });
+}
+
 function showFeedbackToast(text) {
   const badge = document.createElement("div");
   badge.style.cssText = `
@@ -367,3 +379,6 @@ appendLog("system", "Codex 任务提醒系统就绪", "服务已订阅事件流�
 updateActiveCount();
 void loadPreferences();
 connectEventStream();
+reportWorkbenchPresence();
+document.addEventListener("visibilitychange", reportWorkbenchPresence);
+window.setInterval(reportWorkbenchPresence, 2_000);

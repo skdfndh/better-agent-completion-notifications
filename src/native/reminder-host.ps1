@@ -20,6 +20,7 @@ $eventLogPath = Join-Path $WorkspacePath '.codex\codex-task-reminder\events.ndjs
 $appDataPath = $env:APPDATA
 if (-not $appDataPath) { $appDataPath = $WorkspacePath }
 $preferencesPath = Join-Path $appDataPath 'CodexTaskReminder\preferences.json'
+$workbenchPresencePath = Join-Path $appDataPath 'CodexTaskReminder\workbench-presence.json'
 $diagnosticLogPath = Join-Path $appDataPath 'CodexTaskReminder\host.log'
 $script:lastOffset = 0
 
@@ -40,6 +41,18 @@ function Get-Preferences {
     }
   } catch { }
   return $default
+}
+
+function Test-WorkbenchActive {
+  try {
+    if (-not (Test-Path -LiteralPath $workbenchPresencePath)) { return $false }
+    $presence = Get-Content -LiteralPath $workbenchPresencePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($presence.active -ne $true -or -not $presence.expiresAt) { return $false }
+    $expiresAt = [DateTimeOffset]::Parse([string]$presence.expiresAt)
+    return $expiresAt -gt [DateTimeOffset]::UtcNow
+  } catch {
+    return $false
+  }
 }
 
 function Get-Brush([string]$hex) {
@@ -160,9 +173,13 @@ function Create-StyledButton([string]$text, [string]$bgHex, [string]$borderHex, 
 }
 
 function Show-ReminderWindow($eventData) {
-  Write-Diagnostic "显示统一提醒：$($eventData.status) / $($eventData.taskId)"
   $preferences = Get-Preferences
   if ($preferences.mode -eq 'hidden') { return }
+  if (Test-WorkbenchActive) {
+    Write-Diagnostic "工作台正在展示提醒，跳过原生提醒：$($eventData.status) / $($eventData.taskId)"
+    return
+  }
+  Write-Diagnostic "显示统一提醒：$($eventData.status) / $($eventData.taskId)"
 
   $visuals = Get-StatusVisuals $eventData.status
 
