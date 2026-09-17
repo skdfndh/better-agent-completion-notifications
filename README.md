@@ -1,4 +1,4 @@
-# Codex Task Reminder
+# 更好的 Codex 完成通知 / Better Codex Completion Notifications
 
 为 Codex 任务事件提供本地、可配置的醒目提醒。它将任务完成、等待输入、等待授权、失败和中断统一为事件流，并可展示为浏览器工作台或 Windows 原生弹窗。
 
@@ -15,8 +15,8 @@
 需要 Node.js 22.6 或更高版本。
 
 ```powershell
-git clone <your-fork-url>
-cd codex-task-reminder
+git clone https://github.com/skdfndh/better-codex-completion-notifications.git
+cd better-codex-completion-notifications
 npm test
 npm run ui
 ```
