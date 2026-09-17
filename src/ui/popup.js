@@ -90,38 +90,6 @@ function dispatchEvent(eventData) {
   service.receive(eventData, runtimeContext);
 }
 
-// 连接事件流
-function connectEventStream() {
-  const stream = new EventSource("/api/events");
-  stream.addEventListener("open", () => {
-    if (statusTextEl) statusTextEl.textContent = "已连接 Codex 提醒事件流";
-    if (standbyEl) standbyEl.classList.remove("disconnected");
-  });
-  stream.addEventListener("error", () => {
-    if (statusTextEl) statusTextEl.textContent = "事件流重连中...";
-    if (standbyEl) standbyEl.classList.add("disconnected");
-  });
-  stream.addEventListener("task", (message) => {
-    try {
-      dispatchEvent(JSON.parse(message.data));
-    } catch {
-      // 容错处理
-    }
-  });
-}
-
-function reportWorkbenchPresence() {
-  if (document.visibilityState !== "visible") return;
-
-  fetch("/api/workbench-presence", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ active: true }),
-  }).catch(() => {
-    // 独立弹窗仍可在状态上报失败时继续接收事件。
-  });
-}
-
 // 支持 URL 参数模拟或直接渲染单个事件
 function parseUrlParams() {
   const params = new URLSearchParams(window.location.search);
@@ -164,9 +132,5 @@ async function loadPreferences() {
 
 void loadPreferences().then(() => {
   parseUrlParams();
-  connectEventStream();
-  reportWorkbenchPresence();
-  document.addEventListener("visibilitychange", reportWorkbenchPresence);
-  window.setInterval(reportWorkbenchPresence, 2_000);
   updateStandbyState();
 });

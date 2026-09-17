@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { unwatchFile, watchFile } from "node:fs";
-import { mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
+import { open, readFile, stat } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { workspaceEventLogPath } from "../event-log.ts";
@@ -11,7 +11,6 @@ const UI_DIRECTORY = fileURLToPath(new URL(".", import.meta.url));
 const LOOPBACK_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3300;
 const EVENT_POLL_INTERVAL_MS = 500;
-const WORKBENCH_HEARTBEAT_TIMEOUT_MS = 5_000;
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -43,25 +42,6 @@ function sendJson(res, statusCode, body) {
 function sendNotFound(res) {
   res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
   res.end("404 Not Found");
-}
-
-function defaultWorkbenchPresencePath(appData = process.env.APPDATA) {
-  return join(appData ?? process.cwd(), "CodexTaskReminder", "workbench-presence.json");
-}
-
-async function saveWorkbenchPresence(filePath, body) {
-  if (typeof body !== "object" || body === null || body.active !== true) {
-    throw new Error("工作台状态无效。");
-  }
-
-  const presence = {
-    active: true,
-    updatedAt: new Date().toISOString(),
-    expiresAt: new Date(Date.now() + WORKBENCH_HEARTBEAT_TIMEOUT_MS).toISOString(),
-  };
-  await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(presence)}\n`, "utf8");
-  return presence;
 }
 
 function safeStaticFilePath(pathname) {
@@ -250,7 +230,6 @@ async function serveStaticFile(pathname, res) {
 export async function createReminderUiServer(options = {}) {
   const eventLogPath = options.eventLogPath ?? await resolveWorkspaceEventLogPath(options);
   const preferencesStore = options.preferencesStore ?? new JsonPreferencesStore(options.preferencesPath);
-  const workbenchPresencePath = options.workbenchPresencePath ?? defaultWorkbenchPresencePath();
   const clients = new Set();
   const broadcast = (event) => {
     const payload = `event: task\ndata: ${JSON.stringify(event)}\n\n`;
@@ -292,17 +271,6 @@ export async function createReminderUiServer(options = {}) {
         sendJson(res, 200, preferences);
       } catch (error) {
         sendJson(res, 400, { error: error instanceof Error ? error.message : "提醒设置无效。" });
-      }
-      return;
-    }
-
-    if (requestUrl.pathname === "/api/workbench-presence" && req.method === "PUT") {
-      try {
-        const rawBody = await readRequestBody(req);
-        const presence = await saveWorkbenchPresence(workbenchPresencePath, JSON.parse(rawBody));
-        sendJson(res, 200, presence);
-      } catch (error) {
-        sendJson(res, 400, { error: error instanceof Error ? error.message : "工作台状态无效。" });
       }
       return;
     }

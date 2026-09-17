@@ -120,22 +120,10 @@ function connectEventStream() {
   stream.addEventListener("error", () => setStreamStatus(false));
   stream.addEventListener("task", (message) => {
     try {
-      dispatchEvent(JSON.parse(message.data));
+      dispatchEvent(JSON.parse(message.data), { preview: false });
     } catch {
       appendLog("error", "收到无效任务事件", "事件流数据已忽略。");
     }
-  });
-}
-
-function reportWorkbenchPresence() {
-  if (document.visibilityState !== "visible") return;
-
-  fetch("/api/workbench-presence", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ active: true }),
-  }).catch(() => {
-    // 工作台状态上报失败不影响本地设置与事件流。
   });
 }
 
@@ -205,7 +193,12 @@ service.subscribe((change) => {
 });
 
 // 统一分发事件到 Service
-function dispatchEvent(eventData) {
+function dispatchEvent(eventData, { preview = true } = {}) {
+  if (!preview) {
+    appendLog("event", "已交由原生桌面提醒", `${eventData.status}: ${eventData.title}`);
+    return;
+  }
+
   const decision = service.receive(eventData, runtimeContext);
   if (decision.kind === "suppressed") {
     appendLog(
@@ -379,6 +372,3 @@ appendLog("system", "Codex 任务提醒系统就绪", "服务已订阅事件流�
 updateActiveCount();
 void loadPreferences();
 connectEventStream();
-reportWorkbenchPresence();
-document.addEventListener("visibilitychange", reportWorkbenchPresence);
-window.setInterval(reportWorkbenchPresence, 2_000);
