@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Codex 任务完成醒目提醒系统 - 前端界面与控制台</title>
+  <meta name="description" content="基于本地前端设计技能与 Codex 核心接口构建的高质感任务提醒界面与实时模拟控制台。">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- 顶部导航条 -->
+    <header class="top-navbar">
+      <div class="logo-section">
+        <div class="logo-badge">C</div>
+        <div class="logo-text">
+          <h1>Codex Task Reminder</h1>
+          <p>任务完成醒目提醒核心 · 前端交互控制台</p>
+        </div>
+      </div>
+      <div class="nav-badges">
+        <a href="popup.html" target="_blank" class="toast-btn-action" id="btn-open-popup-window" style="text-decoration: none; padding: 5px 12px;" title="在新窗口中打开纯净独立弹窗">
+          <span>🪟 独立弹窗</span>
+        </a>
+        <div class="status-capsule inactive" id="stream-status" aria-live="polite">
+          <span class="status-dot"></span>
+          <span>正在连接事件流</span>
+        </div>
+        <div class="status-capsule" id="active-count">0 个活跃提醒</div>
+      </div>
+    </header>
+
+    <!-- 主工作区控制台 -->
+    <main class="dashboard-grid">
+      <!-- 左侧：模拟触发器与偏好配置 -->
+      <section class="left-column">
+        <!-- 1. 快速状态模拟 -->
+        <div class="card-panel">
+          <div class="panel-header">
+            <h2>
+              <span>⚡ 快速模拟任务状态</span>
+            </h2>
+            <span class="header-badge">支持 5 种生命周期</span>
+          </div>
+
+          <div class="preset-buttons-grid">
+            <button class="btn-preset preset-completed" data-status="completed" id="btn-mock-completed">
+              <span class="preset-icon">✓</span>
+              <span>模拟完成 (5s)</span>
+            </button>
+            <button class="btn-preset preset-attention" data-status="needs_input" id="btn-mock-needs-input">
+              <span class="preset-icon">💬</span>
+              <span>等待用户输入</span>
+            </button>
+            <button class="btn-preset preset-attention" data-status="needs_authorization" id="btn-mock-needs-auth">
+              <span class="preset-icon">🔐</span>
+              <span>等待管理员授权</span>
+            </button>
+            <button class="btn-preset preset-error" data-status="failed" id="btn-mock-failed">
+              <span class="preset-icon">✕</span>
+              <span>任务执行失败</span>
+            </button>
+            <button class="btn-preset preset-error" data-status="interrupted" id="btn-mock-interrupted">
+              <span class="preset-icon">⚠️</span>
+              <span>任务主动中断</span>
+            </button>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-meta">
+              <h3>音效试听 (Web Audio API)</h3>
+              <p>纯原生浏览器音频波形合成，无需外部文件</p>
+            </div>
+            <div class="audio-preview-row">
+              <button class="btn-audio-test" data-cue="completed">🔔 完成</button>
+              <button class="btn-audio-test" data-cue="attention">⚡ 提醒</button>
+              <button class="btn-audio-test" data-cue="error">🚨 警示</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. 偏好与运行时设置 -->
+        <div class="card-panel">
+          <div class="panel-header">
+            <h2>
+              <span>⚙️ 偏好与环境配置</span>
+            </h2>
+            <span class="header-badge" id="current-mode-label">轻提醒 (Light)</span>
+          </div>
+
+          <!-- 模式切换 -->
+          <div class="setting-row">
+            <div class="setting-meta">
+              <h3>提醒展示模式 (mode)</h3>
+              <p>控制事件分发给轻提醒卡片还是全屏阻塞模态框</p>
+            </div>
+            <div class="segmented-control">
+              <button class="segmented-btn active" data-mode="light" id="mode-btn-light">轻提醒</button>
+              <button class="segmented-btn" data-mode="blocking" id="mode-btn-blocking">遮挡式</button>
+              <button class="segmented-btn" data-mode="hidden" id="mode-btn-hidden">隐藏</button>
+            </div>
+          </div>
+
+          <!-- 声音开关 -->
+          <div class="setting-row">
+            <div class="setting-meta">
+              <h3>声音提示 (soundEnabled)</h3>
+              <p>接收到展示事件时自动播放对应调性的提示音</p>
+            </div>
+            <label class="switch-toggle">
+              <input type="checkbox" id="sound-toggle" checked>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+
+          <!-- 游戏全屏模拟 -->
+          <div class="setting-row">
+            <div class="setting-meta">
+              <h3>游戏全屏模拟 (isGameFullScreen)</h3>
+              <p>检测到全屏游戏运行时全面静默提醒策略</p>
+            </div>
+            <label class="switch-toggle">
+              <input type="checkbox" id="game-toggle">
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 3. 自定义事件生成器 -->
+        <div class="card-panel">
+          <div class="panel-header">
+            <h2>
+              <span>📝 自定义 TaskEvent 构造</span>
+            </h2>
+          </div>
+          <form id="custom-event-form">
+            <div class="form-group">
+              <label for="custom-title">任务标题 (Title)</label>
+              <input type="text" id="custom-title" class="form-input" placeholder="例如：编译生产环境产物..." value="正在拉取最新代码并执行优化">
+            </div>
+            <div class="form-group">
+              <label for="custom-status">目标状态 (Status)</label>
+              <select id="custom-status" class="form-select">
+                <option value="completed">completed (完成)</option>
+                <option value="needs_input">needs_input (等待输入)</option>
+                <option value="needs_authorization">needs_authorization (等待授权)</option>
+                <option value="failed">failed (失败)</option>
+                <option value="interrupted">interrupted (中断)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="custom-summary">详细摘要 (Summary)</label>
+              <textarea id="custom-summary" class="form-textarea" rows="2" placeholder="填写事件详细描述...">已分析 128 个文件，未发现潜在隐患。</textarea>
+            </div>
+            <button type="submit" class="btn-submit-event" id="btn-submit-custom">
+              <span>发射事件到 ReminderService</span>
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- 右侧：实时事件流与架构说明 -->
+      <section class="right-column">
+        <!-- 实时事件流日志 -->
+        <div class="card-panel">
+          <div class="panel-header">
+            <h2>
+              <span>📡 实时订阅流 (ReminderChange)</span>
+            </h2>
+            <button class="toast-btn-action" id="btn-clear-log" style="padding: 4px 10px;">清空</button>
+          </div>
+          <div class="log-terminal" id="log-terminal" role="log" aria-live="polite"></div>
+        </div>
+
+        <!-- 前端接口契约说明 -->
+        <div class="card-panel">
+          <div class="panel-header">
+            <h2>
+              <span>💡 前端接口契约与规范</span>
+            </h2>
+          </div>
+          <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+            <p style="margin-bottom: 8px;"><strong>1. 渲染映射位置：</strong></p>
+            <ul style="padding-left: 18px; margin-bottom: 12px;">
+              <li><code>codex-display-bottom-right</code>: 轻提醒悬浮卡片。支持 5 秒倒计时平滑进度条、悬停暂停。</li>
+              <li><code>codex-display-overlay</code>: 全局遮挡模态框。支持毛玻璃背景阻断、键盘快捷键 (Enter/O)。</li>
+            </ul>
+            <p style="margin-bottom: 8px;"><strong>2. 视觉语义色彩 (visualTone)：</strong></p>
+            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+              <span style="padding: 3px 8px; border-radius: 6px; background: rgba(16,185,129,0.15); color: #34d399; font-size: 11px;">success (翡翠绿)</span>
+              <span style="padding: 3px 8px; border-radius: 6px; background: rgba(245,158,11,0.15); color: #fbbf24; font-size: 11px;">attention (琥珀金)</span>
+              <span style="padding: 3px 8px; border-radius: 6px; background: rgba(244,63,94,0.15); color: #fb7185; font-size: 11px;">error (猩红色)</span>
+            </div>
+            <p style="margin-bottom: 8px;"><strong>3. 操作回流 (Actions)：</strong></p>
+            <p style="font-size: 12px; color: var(--text-muted);">
+              用户点击“我知道了”回流调用 <code>acknowledge(id)</code>；点击关闭回流调用 <code>dismiss(id)</code>；点击“打开任务”通知宿主唤起 Codex 会话。
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 前端接口挂载容器 A：右下角轻提醒卡片容器 -->
+  <div id="codex-display-bottom-right"></div>
+
+  <!-- 前端接口挂载容器 B：全屏遮挡模态框容器 -->
+  <div id="codex-display-overlay"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

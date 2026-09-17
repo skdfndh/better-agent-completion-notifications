@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Codex 任务提醒 - 弹窗</title>
+  <meta name="description" content="Codex 任务完成提醒系统独立弹窗界面">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="popup-page">
+  <!-- 轻提醒挂载容器 -->
+  <div id="codex-display-bottom-right"></div>
+
+  <!-- 全屏遮挡模态框挂载容器 -->
+  <div id="codex-display-overlay"></div>
+
+  <!-- 独立弹窗状态指示胶囊 (仅在未触发弹窗且处于开发/预览模式时提供状态感知) -->
+  <div class="popup-standby-indicator" id="popup-standby">
+    <span class="status-dot"></span>
+    <span id="popup-status-text">Codex 提醒弹窗监听中</span>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

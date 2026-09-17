@@ -1,0 +1,18 @@
+{
+  "name": "codex-task-reminder",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "demo": "node --experimental-strip-types src/cli.ts",
+    "hook": "node --experimental-strip-types src/hook-handler.ts",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "ui": "node --experimental-strip-types src/ui/server.js",
+    "host": "powershell -NoProfile -STA -File src/native/reminder-host.ps1",
+    "host:install": "powershell -NoProfile -File src/native/install-autostart.ps1",
+    "host:uninstall": "powershell -NoProfile -File src/native/uninstall-autostart.ps1"
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  }
+}

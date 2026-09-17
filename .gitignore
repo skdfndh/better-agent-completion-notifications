@@ -1,0 +1,32 @@
+# 凭据与本机配置
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+id_rsa
+id_ed25519
+
+# Node.js
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+*.tsbuildinfo
+npm-debug.log*
+
+# 本地提醒运行数据与报告
+.codex/
+CodexTaskReminder/
+report.json
+report.md
+
+# 编辑器与系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
