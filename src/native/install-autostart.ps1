@@ -1,4 +1,10 @@
-﻿param([string]$WorkspacePath)
+param(
+  [string]$WorkspacePath,
+  [string]$TaskName = 'CodexTaskReminderWatchdog',
+  [string]$DesktopPath,
+  [switch]$SkipShortcuts,
+  [switch]$SkipStart
+)
 
 if (-not $WorkspacePath) {
   $WorkspacePath = $PSScriptRoot
@@ -9,35 +15,52 @@ if (-not $WorkspacePath) {
   }
 }
 
-$taskName = 'CodexTaskReminderWatchdog'
-$watchdogScript = Join-Path $PSScriptRoot 'reminder-watchdog.ps1'
+$supervisorScript = Join-Path $PSScriptRoot 'reminder-supervisor.ps1'
 $openWorkbenchScript = Join-Path $PSScriptRoot 'open-workbench.ps1'
-$arguments = "-NoProfile -WindowStyle Hidden -File `"$watchdogScript`" -WorkspacePath `"$WorkspacePath`""
-$scheduledTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+$watchdogShortcutName = 'Codex ' + [char]0x4EFB + [char]0x52A1 + [char]0x63D0 + [char]0x9192 + [char]0x5B88 + [char]0x62A4 + [char]0x5668 + '.lnk'
+$workbenchShortcutName = 'Codex ' + [char]0x63D0 + [char]0x9192 + [char]0x5DE5 + [char]0x4F5C + [char]0x53F0 + '.lnk'
+$arguments = "-NoProfile -WindowStyle Hidden -File `"$supervisorScript`" -WorkspacePath `"$WorkspacePath`""
+$scheduledTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if ($scheduledTask) {
-  Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+  Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+  Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
 }
 
-$desktopPath = [Environment]::GetFolderPath('Desktop')
-$startupPath = [Environment]::GetFolderPath('Startup')
-$shell = New-Object -ComObject WScript.Shell
+$currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments -WorkingDirectory $PSScriptRoot
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+$principal = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description 'Starts and restarts the Codex task reminder watchdog for the current user.' -Force | Out-Null
 
-$watchdogShortcutPath = Join-Path $startupPath 'Codex 任务提醒守护器.lnk'
-$watchdogShortcut = $shell.CreateShortcut($watchdogShortcutPath)
-$watchdogShortcut.TargetPath = 'powershell.exe'
-$watchdogShortcut.Arguments = $arguments
-$watchdogShortcut.WorkingDirectory = Split-Path -Parent $watchdogScript
-$watchdogShortcut.Save()
+if (-not $SkipShortcuts) {
+  if (-not $DesktopPath) {
+    $DesktopPath = [Environment]::GetFolderPath('Desktop')
+  }
+  $startupPath = [Environment]::GetFolderPath('Startup')
+  $shell = New-Object -ComObject WScript.Shell
+  $watchdogShortcutPath = Join-Path $startupPath $watchdogShortcutName
+  if (Test-Path -LiteralPath $watchdogShortcutPath) {
+    Remove-Item -LiteralPath $watchdogShortcutPath -Force
+  }
 
-$watchdogRunning = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*reminder-watchdog.ps1*' }).Count -gt 0
-if (-not $watchdogRunning) {
-  Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden
+  $shortcutPath = Join-Path $DesktopPath $workbenchShortcutName
+  $shortcut = $shell.CreateShortcut($shortcutPath)
+  $shortcut.TargetPath = 'powershell.exe'
+  $shortcut.Arguments = "-NoProfile -File `"$openWorkbenchScript`" -WorkspacePath `"$WorkspacePath`""
+  $shortcut.WorkingDirectory = Split-Path -Parent $openWorkbenchScript
+  $shortcut.Save()
 }
 
-$shortcutPath = Join-Path $desktopPath 'Codex 提醒工作台.lnk'
-$shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = 'powershell.exe'
-$shortcut.Arguments = "-NoProfile -File `"$openWorkbenchScript`" -WorkspacePath `"$WorkspacePath`""
-$shortcut.WorkingDirectory = Split-Path -Parent $openWorkbenchScript
-$shortcut.Save()
+if (-not $SkipStart) {
+  $existingSupervisors = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like '*reminder-supervisor.ps1*' })
+  $existingWatchdogs = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like '*reminder-watchdog.ps1*' })
+  $existingHosts = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like '*reminder-host.ps1*' })
+  foreach ($reminderProcess in $existingSupervisors) {
+    Stop-Process -Id $reminderProcess.ProcessId -ErrorAction SilentlyContinue
+  }
+  foreach ($reminderProcess in @($existingHosts + $existingWatchdogs)) {
+    Stop-Process -Id $reminderProcess.ProcessId -ErrorAction SilentlyContinue
+  }
+  Start-ScheduledTask -TaskName $TaskName
+}

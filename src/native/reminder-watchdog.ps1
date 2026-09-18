@@ -43,9 +43,25 @@ function Test-WorkbenchAvailable {
   }
 }
 
+function Get-ManagedProcess {
+  param([string]$ScriptPath)
+
+  $managedProcesses = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like "*$ScriptPath*" })
+  foreach ($managedProcess in $managedProcesses) {
+    $process = Get-Process -Id $managedProcess.ProcessId -ErrorAction SilentlyContinue
+    if ($process -and -not $process.HasExited) {
+      return $process
+    }
+  }
+  return $null
+}
+
 if ($MyInvocation.InvocationName -eq '.' -or $env:TEST_REMINDER_WATCHDOG_NO_RUN) {
   return
 }
+
+$hostProcess = Get-ManagedProcess -ScriptPath $hostScript
+$workbenchProcess = Get-ManagedProcess -ScriptPath $uiServerScript
 
 while ($true) {
   $codexRunning = @(Get-Process -Name 'codex' -ErrorAction SilentlyContinue).Count -gt 0
