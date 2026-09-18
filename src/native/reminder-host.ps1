@@ -21,12 +21,34 @@ $appDataPath = $env:APPDATA
 if (-not $appDataPath) { $appDataPath = $WorkspacePath }
 $preferencesPath = Join-Path $appDataPath 'CodexTaskReminder\preferences.json'
 $diagnosticLogPath = Join-Path $appDataPath 'CodexTaskReminder\host.log'
+$audioCuePlayerPath = Join-Path $PSScriptRoot 'audio-cue-player.cs'
 $script:lastOffset = 0
+$script:audioCuePlayerReady = $false
 
 function Write-Diagnostic($message) {
   $directory = Split-Path -Parent $diagnosticLogPath
   if (-not (Test-Path -LiteralPath $directory)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
   Add-Content -LiteralPath $diagnosticLogPath -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $message" -Encoding UTF8
+}
+
+function Play-ReminderSound([string]$status) {
+  $cue = if ($status -eq 'completed') {
+    'completed'
+  } elseif ($status -in @('needs_input', 'needs_authorization')) {
+    'attention'
+  } else {
+    'error'
+  }
+
+  try {
+    if (-not $script:audioCuePlayerReady) {
+      Add-Type -Path $audioCuePlayerPath -ErrorAction Stop
+      $script:audioCuePlayerReady = $true
+    }
+    [CodexTaskReminder.NativeAudioCuePlayer]::Play($cue)
+  } catch {
+    Write-Diagnostic "自定义音效播放失败：$($_.Exception.Message)"
+  }
 }
 
 function Get-Preferences {
@@ -168,13 +190,7 @@ function Show-ReminderWindow($eventData) {
 
   # 播放声音提示
   if ($preferences.soundEnabled) {
-    if ($eventData.status -eq 'completed') {
-      [System.Media.SystemSounds]::Asterisk.Play()
-    } elseif ($eventData.status -in @('needs_input', 'needs_authorization')) {
-      [System.Media.SystemSounds]::Exclamation.Play()
-    } else {
-      [System.Media.SystemSounds]::Hand.Play()
-    }
+    Play-ReminderSound $eventData.status
   }
 
   $window = New-Object System.Windows.Window
