@@ -1,6 +1,8 @@
 param(
   [string]$WorkspacePath = $env:CODEX_TASK_REMINDER_WORKSPACE,
+  [string]$AppDataPath,
   [string]$WatchdogScript = (Join-Path $PSScriptRoot 'reminder-watchdog.ps1'),
+  [switch]$DisableNativeHost,
   [int]$RestartDelaySeconds = 2
 )
 
@@ -13,6 +15,8 @@ if (-not $WorkspacePath) {
   }
 }
 
+if ($AppDataPath) { $env:CODEX_TASK_REMINDER_APPDATA_PATH = $AppDataPath }
+if ($DisableNativeHost) { $env:CODEX_TASK_REMINDER_NATIVE_HOST_ENABLED = 'false' }
 $watchdogArguments = "-NoProfile -WindowStyle Hidden -File `"$WatchdogScript`" -WorkspacePath `"$WorkspacePath`""
 
 function Get-ManagedProcess {

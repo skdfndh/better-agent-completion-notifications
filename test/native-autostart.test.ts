@@ -12,6 +12,8 @@ const projectPath = process.cwd();
 const installScript = join(projectPath, "src", "native", "install-autostart.ps1");
 const supervisorScript = join(projectPath, "src", "native", "reminder-supervisor.ps1");
 const watchdogScript = join(projectPath, "src", "native", "reminder-watchdog.ps1");
+const hostLauncherScript = join(projectPath, "src", "native", "reminder-host-launcher.ps1");
+const desktopHostSupervisorScript = join(projectPath, "src", "native", "reminder-desktop-host-supervisor.ps1");
 
 function toPowerShellLiteral(value: string) {
   return value.replaceAll("'", "''");
@@ -60,6 +62,7 @@ test("安装脚本创建可重启的登录守护任务", async () => {
     assert.equal(task.restartCount, 3);
     assert.equal(task.restartInterval, "PT1M");
     assert.match(task.arguments, /reminder-supervisor\.ps1/);
+    assert.match(task.arguments, /-DisableNativeHost/);
   } finally {
     await runPowerShell(`
       Stop-ScheduledTask -TaskName '${taskName}' -ErrorAction SilentlyContinue
@@ -144,20 +147,127 @@ test("守护器启动时接管已有的受管进程", async () => {
   }
 });
 
+test("正式宿主启动器会清除遗留的测试开关", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-host-launcher-"));
+  const workerScript = join(directory, "test-host.ps1");
+  const markerPath = join(directory, "started.txt");
+  await writeFile(
+    workerScript,
+    "param([string]$WorkspacePath)\nif ($env:TEST_REMINDER_HOST_NO_RUN) { exit 7 }\nSet-Content -LiteralPath (Join-Path $WorkspacePath 'started.txt') -Value 'started'\n",
+    "utf8",
+  );
+  const escapedLauncherScript = toPowerShellLiteral(hostLauncherScript);
+  const escapedWorkerScript = toPowerShellLiteral(workerScript);
+  const escapedDirectory = toPowerShellLiteral(directory);
+
+  try {
+    await runPowerShell(`
+    $env:TEST_REMINDER_HOST_NO_RUN = '1'
+    & '${escapedLauncherScript}' -WorkspacePath '${escapedDirectory}' -HostScript '${escapedWorkerScript}'
+    `);
+    assert.equal((await readFile(markerPath, "utf8")).trim(), "started");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("正式宿主启动器在独立进程中运行宿主", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-host-process-"));
+  const workerScript = join(directory, "test-host.ps1");
+  const markerPath = join(directory, "host-pid.txt");
+  await writeFile(
+    workerScript,
+    "param([string]$WorkspacePath)\nSet-Content -LiteralPath (Join-Path $WorkspacePath 'host-pid.txt') -Value $PID\n",
+    "utf8",
+  );
+  const launcher = spawn(
+    "powershell.exe",
+    ["-NoProfile", "-File", hostLauncherScript, "-WorkspacePath", directory, "-HostScript", workerScript],
+    { env: { ...process.env, TEST_REMINDER_HOST_NO_RUN: "1" }, windowsHide: true },
+  );
+
+  try {
+    await new Promise<void>((resolveExit, rejectExit) => {
+      launcher.once("error", rejectExit);
+      launcher.once("exit", (code) => (code === 0 ? resolveExit() : rejectExit(new Error(`启动器退出码：${code}`))));
+    });
+    assert.notEqual(Number((await readFile(markerPath, "utf8")).trim()), launcher.pid);
+  } finally {
+    launcher.kill();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("正式宿主启动器将指定的应用数据目录传给宿主", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-host-appdata-"));
+  const workerScript = join(directory, "test-host.ps1");
+  const markerPath = join(directory, "appdata.txt");
+  await writeFile(
+    workerScript,
+    "param([string]$WorkspacePath)\nSet-Content -LiteralPath (Join-Path $WorkspacePath 'appdata.txt') -Value $env:APPDATA\n",
+    "utf8",
+  );
+
+  try {
+    await execFileAsync(
+      "powershell.exe",
+      ["-NoProfile", "-File", hostLauncherScript, "-WorkspacePath", directory, "-AppDataPath", directory, "-HostScript", workerScript],
+      { windowsHide: true },
+    );
+    assert.equal((await readFile(markerPath, "utf8")).trim(), directory);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("桌面会话监督器会启动原生提醒宿主", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-desktop-host-"));
+  const workerScript = join(directory, "test-host.ps1");
+  const markerPath = join(directory, "started.txt");
+  await writeFile(
+    workerScript,
+    "param([string]$WorkspacePath)\nSet-Content -LiteralPath (Join-Path $WorkspacePath 'started.txt') -Value $PID\nStart-Sleep -Seconds 10\n",
+    "utf8",
+  );
+  const supervisor = spawn(
+    "powershell.exe",
+    ["-NoProfile", "-File", desktopHostSupervisorScript, "-WorkspacePath", directory, "-HostScript", workerScript, "-AlwaysRun", "-PollSeconds", "1"],
+    { windowsHide: true },
+  );
+
+  try {
+    await waitFor(async () => {
+      try {
+        return (await stat(markerPath)).isFile();
+      } catch {
+        return false;
+      }
+    }, 5_000);
+    assert.notEqual(Number((await readFile(markerPath, "utf8")).trim()), supervisor.pid);
+  } finally {
+    supervisor.kill();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("安装脚本在指定桌面目录创建工作台入口", async () => {
   const taskName = `CodexTaskReminderWatchdog-Test-${randomUUID()}`;
   const desktopPath = await mkdtemp(join(tmpdir(), "codex-task-reminder-shortcut-"));
+  const startupPath = await mkdtemp(join(tmpdir(), "codex-task-reminder-startup-"));
   const escapedInstallScript = toPowerShellLiteral(installScript);
   const escapedProjectPath = toPowerShellLiteral(projectPath);
   const escapedDesktopPath = toPowerShellLiteral(desktopPath);
+  const escapedStartupPath = toPowerShellLiteral(startupPath);
 
   try {
     await runPowerShell(`
       $ErrorActionPreference = 'Stop'
-      & '${escapedInstallScript}' -WorkspacePath '${escapedProjectPath}' -TaskName '${taskName}' -DesktopPath '${escapedDesktopPath}' -SkipStart
+      & '${escapedInstallScript}' -WorkspacePath '${escapedProjectPath}' -TaskName '${taskName}' -DesktopPath '${escapedDesktopPath}' -StartupPath '${escapedStartupPath}' -SkipStart
     `);
     const shortcut = await stat(join(desktopPath, "Codex 提醒工作台.lnk"));
     assert.equal(shortcut.isFile(), true);
+    const desktopHostShortcut = await stat(join(startupPath, "Codex 提醒桌面宿主.lnk"));
+    assert.equal(desktopHostShortcut.isFile(), true);
   } finally {
     await runPowerShell(`
       Stop-ScheduledTask -TaskName '${taskName}' -ErrorAction SilentlyContinue
@@ -165,5 +275,6 @@ test("安装脚本在指定桌面目录创建工作台入口", async () => {
       exit 0
     `);
     await rm(desktopPath, { recursive: true, force: true });
+    await rm(startupPath, { recursive: true, force: true });
   }
 });

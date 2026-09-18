@@ -12,6 +12,9 @@ if (-not $WorkspacePath) {
 }
 
 $hostScript = Join-Path $PSScriptRoot 'reminder-host.ps1'
+$hostLauncherScript = Join-Path $PSScriptRoot 'reminder-host-launcher.ps1'
+$appDataPath = $env:CODEX_TASK_REMINDER_APPDATA_PATH
+$nativeHostEnabled = $env:CODEX_TASK_REMINDER_NATIVE_HOST_ENABLED -ne 'false'
 $projectPath = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $uiServerScript = Join-Path $projectPath 'src\ui\server.js'
 $preferencesPath = Join-Path $env:APPDATA 'CodexTaskReminder\preferences.json'
@@ -61,7 +64,7 @@ if ($MyInvocation.InvocationName -eq '.' -or $env:TEST_REMINDER_WATCHDOG_NO_RUN)
   return
 }
 
-$hostProcess = Get-ManagedProcess -ScriptPath $hostScript
+$hostProcess = Get-ManagedProcess -ScriptPath $hostLauncherScript
 $workbenchProcess = Get-ManagedProcess -ScriptPath $uiServerScript
 
 while ($true) {
@@ -70,8 +73,8 @@ while ($true) {
   $workbenchRunning = $workbenchProcess -and -not $workbenchProcess.HasExited
   $workbenchEnabled = Get-WorkbenchServiceEnabled
 
-  if ($codexRunning -and -not $hostRunning) {
-    $arguments = "-NoProfile -STA -File `"$hostScript`" -WorkspacePath `"$WorkspacePath`""
+  if ($nativeHostEnabled -and $codexRunning -and -not $hostRunning) {
+    $arguments = "-NoProfile -STA -File `"$hostLauncherScript`" -WorkspacePath `"$WorkspacePath`" -AppDataPath `"$appDataPath`""
     $hostProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -PassThru -WindowStyle Normal
   }
 
@@ -79,7 +82,7 @@ while ($true) {
     $workbenchProcess = Start-WorkbenchService
   }
 
-  if (-not $codexRunning -and $hostRunning) {
+  if ((-not $nativeHostEnabled -or -not $codexRunning) -and $hostRunning) {
     Stop-Process -Id $hostProcess.Id -ErrorAction SilentlyContinue
     $hostProcess = $null
   }
