@@ -2,6 +2,20 @@
   [string]$WorkspacePath = $env:CODEX_TASK_REMINDER_WORKSPACE
 )
 
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class ReminderConsoleWindow {
+  [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+  [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr handle, int command);
+  public static void Hide() {
+    IntPtr handle = GetConsoleWindow();
+    if (handle != IntPtr.Zero) ShowWindow(handle, 0);
+  }
+}
+'@
+[ReminderConsoleWindow]::Hide()
+
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName WindowsBase

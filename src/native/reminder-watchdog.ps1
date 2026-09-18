@@ -54,8 +54,8 @@ while ($true) {
   $workbenchEnabled = Get-WorkbenchServiceEnabled
 
   if ($codexRunning -and -not $hostRunning) {
-    $arguments = "-NoProfile -STA -WindowStyle Hidden -File `"$hostScript`" -WorkspacePath `"$WorkspacePath`""
-    $hostProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -PassThru -WindowStyle Hidden
+    $arguments = "-NoProfile -STA -File `"$hostScript`" -WorkspacePath `"$WorkspacePath`""
+    $hostProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -PassThru -WindowStyle Normal
   }
 
   if ($codexRunning -and $workbenchEnabled -and -not $workbenchRunning -and -not (Test-WorkbenchAvailable)) {
