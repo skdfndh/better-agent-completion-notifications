@@ -3,7 +3,7 @@ import test from "node:test";
 import { appendFile, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { NdjsonEventStreamer, resolveWorkspaceEventLogPath } from "../src/ui/server.js";
+import { NdjsonEventStreamer, resolveEventLogPath } from "../src/ui/server.js";
 
 test("事件监听器只转发新增且有效的 NDJSON 事件", async () => {
   const directory = await mkdtemp(join(tmpdir(), "codex-reminder-ui-"));
@@ -24,14 +24,9 @@ test("事件监听器只转发新增且有效的 NDJSON 事件", async () => {
   }
 });
 
-test("显式工作区决定事件日志位置", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "codex-reminder-workspace-"));
-  try {
-    const path = await resolveWorkspaceEventLogPath({ workspacePath: directory });
-    assert.equal(path, join(directory, ".codex", "codex-task-reminder", "events.ndjson"));
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+test("显式事件日志覆盖工作台默认位置", () => {
+  const path = resolveEventLogPath({ eventLogPath: "C:\\CodexTaskReminder\\custom-events.ndjson" });
+  assert.equal(path, "C:\\CodexTaskReminder\\custom-events.ndjson");
 });
 
 test("UI 服务器能够正确托管独立弹窗 popup.html 与 popup.js", async () => {

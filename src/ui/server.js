@@ -1,9 +1,9 @@
 import { createServer } from "node:http";
 import { unwatchFile, watchFile } from "node:fs";
 import { open, readFile, stat } from "node:fs/promises";
-import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { extname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { workspaceEventLogPath } from "../event-log.ts";
+import { defaultEventLogPath } from "../event-log.ts";
 import { validateTaskEvent } from "../events.ts";
 import { JsonPreferencesStore } from "../preferences.ts";
 
@@ -63,32 +63,8 @@ function safeStaticFilePath(pathname) {
   return filePath;
 }
 
-async function isDirectory(path) {
-  try {
-    return (await stat(path)).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-export async function resolveWorkspaceEventLogPath({ workspacePath = process.env.CODEX_TASK_REMINDER_WORKSPACE, startPath = process.cwd() } = {}) {
-  if (workspacePath) {
-    return workspaceEventLogPath(resolve(workspacePath));
-  }
-
-  let candidate = resolve(startPath);
-  while (true) {
-    if (await isDirectory(join(candidate, ".codex"))) {
-      return workspaceEventLogPath(candidate);
-    }
-
-    const parent = dirname(candidate);
-    if (parent === candidate) {
-      return workspaceEventLogPath(resolve(startPath));
-    }
-
-    candidate = parent;
-  }
+export function resolveEventLogPath({ eventLogPath = process.env.CODEX_TASK_REMINDER_EVENTS_PATH } = {}) {
+  return eventLogPath || defaultEventLogPath();
 }
 
 export class NdjsonEventStreamer {
@@ -228,7 +204,7 @@ async function serveStaticFile(pathname, res) {
 }
 
 export async function createReminderUiServer(options = {}) {
-  const eventLogPath = options.eventLogPath ?? await resolveWorkspaceEventLogPath(options);
+  const eventLogPath = resolveEventLogPath(options);
   const preferencesStore = options.preferencesStore ?? new JsonPreferencesStore(options.preferencesPath);
   const clients = new Set();
   const broadcast = (event) => {

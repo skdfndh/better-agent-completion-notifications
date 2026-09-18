@@ -30,9 +30,10 @@ if (-not $WorkspacePath) {
   }
 }
 
-$eventLogPath = Join-Path $WorkspacePath '.codex\codex-task-reminder\events.ndjson'
 $appDataPath = $env:APPDATA
 if (-not $appDataPath) { $appDataPath = $WorkspacePath }
+$eventLogPath = $env:CODEX_TASK_REMINDER_EVENTS_PATH
+if (-not $eventLogPath) { $eventLogPath = Join-Path $appDataPath 'CodexTaskReminder\events.ndjson' }
 $preferencesPath = Join-Path $appDataPath 'CodexTaskReminder\preferences.json'
 $diagnosticLogPath = Join-Path $appDataPath 'CodexTaskReminder\host.log'
 $audioCuePlayerPath = Join-Path $PSScriptRoot 'audio-cue-player.cs'

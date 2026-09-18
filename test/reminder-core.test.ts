@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { validateTaskEvent } from "../src/events.ts";
 import { mapCodexHookEvent } from "../src/codex-hooks.ts";
-import { appendTaskEvent, workspaceEventLogPath } from "../src/event-log.ts";
+import { appendTaskEvent, defaultEventLogPath } from "../src/event-log.ts";
 import { DEFAULT_PREFERENCES, JsonPreferencesStore } from "../src/preferences.ts";
 import { decideReminder } from "../src/policy.ts";
 import { ReminderService } from "../src/reminder-service.ts";
@@ -117,9 +117,9 @@ test("钩子事件可追加写入本地 NDJSON 日志", async () => {
   assert.equal(JSON.parse(lines[0]).status, "completed");
 });
 
-test("钩子可将事件写入触发任务的工作区", () => {
+test("各工作区的钩子默认写入同一个用户级事件日志", () => {
   assert.equal(
-    workspaceEventLogPath("C:\\workspace"),
-    join("C:\\workspace", ".codex", "codex-task-reminder", "events.ndjson"),
+    defaultEventLogPath("C:\\Users\\tester\\AppData\\Roaming"),
+    join("C:\\Users\\tester\\AppData\\Roaming", "CodexTaskReminder", "events.ndjson"),
   );
 });
