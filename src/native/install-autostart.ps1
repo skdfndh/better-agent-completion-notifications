@@ -13,18 +13,29 @@ $taskName = 'CodexTaskReminderWatchdog'
 $watchdogScript = Join-Path $PSScriptRoot 'reminder-watchdog.ps1'
 $openWorkbenchScript = Join-Path $PSScriptRoot 'open-workbench.ps1'
 $arguments = "-NoProfile -WindowStyle Hidden -File `"$watchdogScript`" -WorkspacePath `"$WorkspacePath`""
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description '随 Codex 启停的本地任务提醒守护器' -Force | Out-Null
-$registeredTask = Get-ScheduledTask -TaskName $taskName
-if ($registeredTask.State -ne 'Running') {
-  Start-ScheduledTask -TaskName $taskName
+$scheduledTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if ($scheduledTask) {
+  Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
 }
 
 $desktopPath = [Environment]::GetFolderPath('Desktop')
-$shortcutPath = Join-Path $desktopPath 'Codex 提醒工作台.lnk'
+$startupPath = [Environment]::GetFolderPath('Startup')
 $shell = New-Object -ComObject WScript.Shell
+
+$watchdogShortcutPath = Join-Path $startupPath 'Codex 任务提醒守护器.lnk'
+$watchdogShortcut = $shell.CreateShortcut($watchdogShortcutPath)
+$watchdogShortcut.TargetPath = 'powershell.exe'
+$watchdogShortcut.Arguments = $arguments
+$watchdogShortcut.WorkingDirectory = Split-Path -Parent $watchdogScript
+$watchdogShortcut.Save()
+
+$watchdogRunning = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*reminder-watchdog.ps1*' }).Count -gt 0
+if (-not $watchdogRunning) {
+  Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden
+}
+
+$shortcutPath = Join-Path $desktopPath 'Codex 提醒工作台.lnk'
 $shortcut = $shell.CreateShortcut($shortcutPath)
 $shortcut.TargetPath = 'powershell.exe'
 $shortcut.Arguments = "-NoProfile -File `"$openWorkbenchScript`" -WorkspacePath `"$WorkspacePath`""
