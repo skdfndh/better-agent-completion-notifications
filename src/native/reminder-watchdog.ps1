@@ -46,7 +46,8 @@ function Test-WorkbenchAvailable {
 function Get-ManagedProcess {
   param([string]$ScriptPath)
 
-  $managedProcesses = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like "*$ScriptPath*" })
+  $scriptPattern = '(?i)-File\s+(?:"?' + [Regex]::Escape($ScriptPath) + '"?)(?:\s|$)'
+  $managedProcesses = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -match $scriptPattern })
   foreach ($managedProcess in $managedProcesses) {
     $process = Get-Process -Id $managedProcess.ProcessId -ErrorAction SilentlyContinue
     if ($process -and -not $process.HasExited) {

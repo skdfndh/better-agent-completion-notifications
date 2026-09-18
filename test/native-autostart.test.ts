@@ -42,8 +42,11 @@ test("安装脚本创建可重启的登录守护任务", async () => {
       $ErrorActionPreference = 'Stop'
       & '${escapedInstallScript}' -WorkspacePath '${escapedProjectPath}' -TaskName '${taskName}' -SkipShortcuts -SkipStart
       $task = Get-ScheduledTask -TaskName '${taskName}'
+      $recoveryTrigger = @($task.Triggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskTimeTrigger' }) | Select-Object -First 1
       [PSCustomObject]@{
         hasLogonTrigger = @($task.Triggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger' }).Count -eq 1
+        hasRecoveryTrigger = $null -ne $recoveryTrigger
+        recoveryInterval = if ($recoveryTrigger) { [string]$recoveryTrigger.Repetition.Interval } else { $null }
         restartCount = [int]$task.Settings.RestartCount
         restartInterval = [string]$task.Settings.RestartInterval
         arguments = [string]$task.Actions[0].Arguments
@@ -52,6 +55,8 @@ test("安装脚本创建可重启的登录守护任务", async () => {
     const task = JSON.parse(stdout.trim());
 
     assert.equal(task.hasLogonTrigger, true);
+    assert.equal(task.hasRecoveryTrigger, true);
+    assert.equal(task.recoveryInterval, "PT1M");
     assert.equal(task.restartCount, 3);
     assert.equal(task.restartInterval, "PT1M");
     assert.match(task.arguments, /reminder-supervisor\.ps1/);
@@ -91,6 +96,28 @@ test("监督器在守护器退出后重新启动它", async () => {
     assert.ok(starts.length >= 2);
   } finally {
     supervisor.kill();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("监督器启动时接管已有的守护器", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-supervisor-adopt-"));
+  const workerScript = join(directory, "managed-watchdog.ps1");
+  await writeFile(workerScript, "Start-Sleep -Seconds 10\n", "utf8");
+  const worker = spawn("powershell.exe", ["-NoProfile", "-File", workerScript], { windowsHide: true });
+  const escapedSupervisorScript = toPowerShellLiteral(supervisorScript);
+  const escapedWorkerScript = toPowerShellLiteral(workerScript);
+
+  try {
+    await new Promise((resolveWait) => setTimeout(resolveWait, 250));
+    const { stdout } = await runPowerShell(`
+      $env:TEST_REMINDER_SUPERVISOR_NO_RUN = '1'
+      . '${escapedSupervisorScript}'
+      (Get-ManagedProcess -ScriptPath '${escapedWorkerScript}').Id
+    `);
+    assert.equal(Number(stdout.trim()), worker.pid);
+  } finally {
+    worker.kill();
     await rm(directory, { recursive: true, force: true });
   }
 });
