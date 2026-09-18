@@ -21,6 +21,7 @@ export type ReminderMode = "blocking" | "light" | "hidden";
 export interface ReminderPreferences {
   mode: ReminderMode;
   soundEnabled: boolean;
+  workbenchServiceEnabled: boolean;
 }
 
 export interface RuntimeContext {

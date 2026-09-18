@@ -5,21 +5,32 @@ import type { ReminderMode, ReminderPreferences } from "./types.ts";
 export const DEFAULT_PREFERENCES: ReminderPreferences = {
   mode: "light",
   soundEnabled: true,
+  workbenchServiceEnabled: true,
 };
 
 const REMINDER_MODES: readonly ReminderMode[] = ["blocking", "light", "hidden"];
 
-function isPreferences(value: unknown): value is ReminderPreferences {
+function normalizePreferences(value: unknown): ReminderPreferences | undefined {
   if (typeof value !== "object" || value === null) {
-    return false;
+    return undefined;
   }
 
   const candidate = value as Record<string, unknown>;
-  return (
+  if (!(
     typeof candidate.mode === "string" &&
     REMINDER_MODES.includes(candidate.mode as ReminderMode) &&
     typeof candidate.soundEnabled === "boolean"
-  );
+  )) {
+    return undefined;
+  }
+
+  return {
+    mode: candidate.mode as ReminderMode,
+    soundEnabled: candidate.soundEnabled,
+    workbenchServiceEnabled: typeof candidate.workbenchServiceEnabled === "boolean"
+      ? candidate.workbenchServiceEnabled
+      : DEFAULT_PREFERENCES.workbenchServiceEnabled,
+  };
 }
 
 export function defaultPreferencesPath(appData = process.env.APPDATA): string {
@@ -37,14 +48,14 @@ export class JsonPreferencesStore {
     try {
       const raw = await readFile(this.filePath, "utf8");
       const parsed: unknown = JSON.parse(raw);
-      return isPreferences(parsed) ? parsed : DEFAULT_PREFERENCES;
+      return normalizePreferences(parsed) ?? DEFAULT_PREFERENCES;
     } catch {
       return DEFAULT_PREFERENCES;
     }
   }
 
   async save(preferences: ReminderPreferences): Promise<void> {
-    if (!isPreferences(preferences)) {
+    if (!normalizePreferences(preferences)) {
       throw new Error("提醒设置无效。");
     }
 

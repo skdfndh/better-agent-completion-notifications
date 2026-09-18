@@ -108,6 +108,7 @@ async function loadPreferences() {
     service.updatePreferences(saved);
     document.querySelector(`.segmented-btn[data-mode="${saved.mode}"]`)?.click();
     if (soundToggle) soundToggle.checked = saved.soundEnabled;
+    if (workbenchServiceToggle) workbenchServiceToggle.checked = saved.workbenchServiceEnabled;
     soundEngine.setEnabled(saved.soundEnabled);
   } catch {
     appendLog("system", "未加载持久化设置", "正在使用默认提醒设置。");
@@ -284,6 +285,15 @@ if (soundToggle) {
     service.updatePreferences({ soundEnabled: enabled });
     soundEngine.setEnabled(enabled);
     appendLog("setting", "修改声音提醒", `声音提示已${enabled ? "开启" : "关闭"}`);
+    savePreferences().catch(() => showFeedbackToast("提醒设置保存失败"));
+  });
+}
+
+const workbenchServiceToggle = document.getElementById("workbench-service-toggle");
+if (workbenchServiceToggle) {
+  workbenchServiceToggle.addEventListener("change", (e) => {
+    preferences.workbenchServiceEnabled = e.target.checked;
+    appendLog("setting", "修改工作台后台服务", `随 Codex 启动已${e.target.checked ? "开启" : "关闭"}`);
     savePreferences().catch(() => showFeedbackToast("提醒设置保存失败"));
   });
 }

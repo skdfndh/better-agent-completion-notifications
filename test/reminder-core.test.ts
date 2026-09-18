@@ -80,6 +80,16 @@ test("损坏的偏好文件回退至默认设置", async () => {
   assert.deepEqual(await store.load(), DEFAULT_PREFERENCES);
 });
 
+test("旧偏好文件默认启用工作台后台服务", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-preferences-"));
+  const filePath = join(directory, "preferences.json");
+  await writeFile(filePath, JSON.stringify({ mode: "light", soundEnabled: false }), "utf8");
+
+  const preferences = await new JsonPreferencesStore(filePath).load();
+  assert.equal(preferences.workbenchServiceEnabled, true);
+  assert.equal(preferences.soundEnabled, false);
+});
+
 test("官方 Stop、PermissionRequest 和 Interrupt 钩子映射为规范化事件", () => {
   const payload = { session_id: "session-1", turn_id: "turn-1" };
 
