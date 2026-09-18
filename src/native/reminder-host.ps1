@@ -6,8 +6,17 @@ Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 public static class ReminderConsoleWindow {
+  [StructLayout(LayoutKind.Sequential)] public struct RECT {
+    public int Left;
+    public int Top;
+    public int Right;
+    public int Bottom;
+  }
   [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
   [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr handle, int command);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr handle, out RECT rect);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr handle);
   public static void Hide() {
     IntPtr handle = GetConsoleWindow();
     if (handle != IntPtr.Zero) ShowWindow(handle, 0);
@@ -67,16 +76,45 @@ function Play-ReminderSound([string]$status) {
 }
 
 function Get-Preferences {
-  $default = @{ mode = 'light'; soundEnabled = $true }
+  $default = @{ mode = 'light'; soundEnabled = $true; fullscreenReminderMode = 'normal' }
   try {
     if (Test-Path -LiteralPath $preferencesPath) {
       $saved = Get-Content -LiteralPath $preferencesPath -Raw | ConvertFrom-Json
       if ($saved.mode -in @('light', 'blocking', 'hidden') -and $saved.soundEnabled -is [bool]) {
-        return @{ mode = $saved.mode; soundEnabled = $saved.soundEnabled }
+        $fullscreenReminderMode = if ($saved.fullscreenReminderMode -in @('normal', 'sound_only', 'disabled')) {
+          $saved.fullscreenReminderMode
+        } else {
+          $default.fullscreenReminderMode
+        }
+        return @{ mode = $saved.mode; soundEnabled = $saved.soundEnabled; fullscreenReminderMode = $fullscreenReminderMode }
       }
     }
   } catch { }
   return $default
+}
+
+function Test-ForegroundWindowIsFullScreen {
+  try {
+    $windowHandle = [ReminderConsoleWindow]::GetForegroundWindow()
+    if (($windowHandle -eq [IntPtr]::Zero) -or ([ReminderConsoleWindow]::IsIconic($windowHandle))) { return $false }
+
+    $windowRect = New-Object 'ReminderConsoleWindow+RECT'
+    if (-not [ReminderConsoleWindow]::GetWindowRect($windowHandle, [ref]$windowRect)) { return $false }
+
+    $screen = [System.Windows.Forms.Screen]::FromHandle($windowHandle)
+    if ($null -eq $screen) { return $false }
+    $screenBounds = $screen.Bounds
+    $tolerance = 2
+
+    return (
+      ([Math]::Abs($windowRect.Left - $screenBounds.Left) -le $tolerance) -and
+      ([Math]::Abs($windowRect.Top - $screenBounds.Top) -le $tolerance) -and
+      ([Math]::Abs($windowRect.Right - $screenBounds.Right) -le $tolerance) -and
+      ([Math]::Abs($windowRect.Bottom - $screenBounds.Bottom) -le $tolerance)
+    )
+  } catch {
+    return $false
+  }
 }
 
 function Get-Brush([string]$hex) {
@@ -199,6 +237,11 @@ function Create-StyledButton([string]$text, [string]$bgHex, [string]$borderHex, 
 function Show-ReminderWindow($eventData) {
   $preferences = Get-Preferences
   if ($preferences.mode -eq 'hidden') { return }
+  $isFullScreen = Test-ForegroundWindowIsFullScreen
+  if ($isFullScreen -and $preferences.fullscreenReminderMode -eq 'disabled') {
+    Write-Diagnostic "前台全屏，已完全关闭提醒：$($eventData.status) / $($eventData.taskId)"
+    return
+  }
   Write-Diagnostic "显示统一提醒：$($eventData.status) / $($eventData.taskId)"
 
   $visuals = Get-StatusVisuals $eventData.status
@@ -206,6 +249,11 @@ function Show-ReminderWindow($eventData) {
   # 播放声音提示
   if ($preferences.soundEnabled) {
     Play-ReminderSound $eventData.status
+  }
+
+  if ($isFullScreen -and $preferences.fullscreenReminderMode -eq 'sound_only') {
+    Write-Diagnostic "前台全屏，仅播放声音：$($eventData.status) / $($eventData.taskId)"
+    return
   }
 
   $window = New-Object System.Windows.Window

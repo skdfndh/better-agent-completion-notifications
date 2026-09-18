@@ -54,12 +54,20 @@ export function decideReminder(
   runtime: RuntimeContext,
   createReminderId: () => string,
 ): ReminderDecision {
-  if (runtime.isGameFullScreen) {
-    return { kind: "suppressed", reason: "game-fullscreen" };
-  }
-
   if (preferences.mode === "hidden") {
     return { kind: "suppressed", reason: "hidden-mode" };
+  }
+
+  if (runtime.isFullScreen || runtime.isGameFullScreen) {
+    if (preferences.fullscreenReminderMode === "disabled") {
+      return { kind: "suppressed", reason: "fullscreen-disabled" };
+    }
+
+    if (preferences.fullscreenReminderMode === "sound_only") {
+      return preferences.soundEnabled
+        ? { kind: "sound-only", soundCue: soundCueFor(event.status) }
+        : { kind: "sound-only" };
+    }
   }
 
   const isBlocking = preferences.mode === "blocking";

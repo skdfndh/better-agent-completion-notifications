@@ -17,15 +17,18 @@ export interface TaskEvent {
 }
 
 export type ReminderMode = "blocking" | "light" | "hidden";
+export type FullscreenReminderMode = "normal" | "sound_only" | "disabled";
 
 export interface ReminderPreferences {
   mode: ReminderMode;
   soundEnabled: boolean;
   workbenchServiceEnabled: boolean;
+  fullscreenReminderMode: FullscreenReminderMode;
 }
 
 export interface RuntimeContext {
-  isGameFullScreen: boolean;
+  isFullScreen?: boolean;
+  isGameFullScreen?: boolean;
 }
 
 export type VisualTone = "success" | "attention" | "error";
@@ -54,7 +57,8 @@ export interface ReminderPresentation {
 
 export type ReminderDecision =
   | { kind: "display"; presentation: ReminderPresentation }
-  | { kind: "suppressed"; reason: "hidden-mode" | "game-fullscreen" };
+  | { kind: "sound-only"; soundCue?: SoundCue }
+  | { kind: "suppressed"; reason: "hidden-mode" | "fullscreen-disabled" };
 
 export type ReminderChange =
   | { kind: "show"; presentation: ReminderPresentation }

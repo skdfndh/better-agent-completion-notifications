@@ -5,7 +5,7 @@ import { soundEngine } from "./audio.js";
 
 // 初始化应用状态与服务
 const preferences = { ...DEFAULT_PREFERENCES };
-let runtimeContext = { isGameFullScreen: false };
+let runtimeContext = { isFullScreen: false };
 
 const toastContainer = document.getElementById("codex-display-bottom-right");
 const overlayContainer = document.getElementById("codex-display-overlay");
@@ -109,6 +109,7 @@ async function loadPreferences() {
     document.querySelector(`.segmented-btn[data-mode="${saved.mode}"]`)?.click();
     if (soundToggle) soundToggle.checked = saved.soundEnabled;
     if (workbenchServiceToggle) workbenchServiceToggle.checked = saved.workbenchServiceEnabled;
+    updateFullscreenMode(saved.fullscreenReminderMode);
     soundEngine.setEnabled(saved.soundEnabled);
   } catch {
     appendLog("system", "未加载持久化设置", "正在使用默认提醒设置。");
@@ -201,11 +202,14 @@ function dispatchEvent(eventData, { preview = true } = {}) {
   }
 
   const decision = service.receive(eventData, runtimeContext);
-  if (decision.kind === "suppressed") {
+  if (decision.kind === "sound-only") {
+    if (decision.soundCue) soundEngine.play(decision.soundCue);
+    appendLog("suppressed", "全屏媒体仅声音提醒", `任务: ${eventData.title}`);
+  } else if (decision.kind === "suppressed") {
     appendLog(
       "suppressed",
       `提醒已被抑制 (${decision.reason})`,
-      `任务: ${eventData.title} | 当前模式: ${preferences.mode} | 游戏全屏: ${runtimeContext.isGameFullScreen}`
+      `任务: ${eventData.title} | 当前模式: ${preferences.mode} | 前台全屏: ${runtimeContext.isFullScreen}`
     );
   }
 }
@@ -298,13 +302,33 @@ if (workbenchServiceToggle) {
   });
 }
 
-// 绑定运行时：游戏全屏模式模拟
+const fullscreenModeButtons = document.querySelectorAll(".segmented-btn[data-fullscreen-mode]");
+
+function updateFullscreenMode(mode) {
+  const resolvedMode = ["normal", "sound_only", "disabled"].includes(mode) ? mode : "normal";
+  preferences.fullscreenReminderMode = resolvedMode;
+  fullscreenModeButtons.forEach((button) => {
+    button.classList.toggle("active", button.getAttribute("data-fullscreen-mode") === resolvedMode);
+  });
+  service.updatePreferences({ fullscreenReminderMode: resolvedMode });
+}
+
+fullscreenModeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const mode = button.getAttribute("data-fullscreen-mode");
+    updateFullscreenMode(mode);
+    appendLog("setting", "修改全屏媒体提醒", `全屏时将${mode === "normal" ? "正常提醒" : mode === "sound_only" ? "仅播放声音" : "完全关闭"}`);
+    savePreferences().catch(() => showFeedbackToast("提醒设置保存失败"));
+  });
+});
+
+// 绑定运行时：全屏媒体模拟
 const gameToggle = document.getElementById("game-toggle");
 if (gameToggle) {
   gameToggle.addEventListener("change", (e) => {
-    const isGame = e.target.checked;
-    runtimeContext.isGameFullScreen = isGame;
-    appendLog("runtime", "游戏全屏状态", `游戏全屏模拟已${isGame ? "激活 (将静默所有提醒)" : "停用"}`);
+    const isFullScreen = e.target.checked;
+    runtimeContext.isFullScreen = isFullScreen;
+    appendLog("runtime", "全屏媒体状态", `全屏媒体模拟已${isFullScreen ? "激活" : "停用"}`);
   });
 }
 

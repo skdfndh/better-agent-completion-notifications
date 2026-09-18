@@ -124,11 +124,23 @@
             </label>
           </div>
 
-          <!-- 游戏全屏模拟 -->
           <div class="setting-row">
             <div class="setting-meta">
-              <h3>游戏全屏模拟 (isGameFullScreen)</h3>
-              <p>检测到全屏游戏运行时全面静默提醒策略</p>
+              <h3>全屏媒体提醒</h3>
+              <p>视频、游戏和直播全屏时的提醒方式</p>
+            </div>
+            <div class="segmented-control" aria-label="全屏媒体提醒方式">
+              <button class="segmented-btn active" data-fullscreen-mode="normal" id="fullscreen-mode-normal">正常开启</button>
+              <button class="segmented-btn" data-fullscreen-mode="sound_only" id="fullscreen-mode-sound-only">仅声音</button>
+              <button class="segmented-btn" data-fullscreen-mode="disabled" id="fullscreen-mode-disabled">完全关闭</button>
+            </div>
+          </div>
+
+          <!-- 全屏媒体模拟 -->
+          <div class="setting-row">
+            <div class="setting-meta">
+              <h3>全屏媒体模拟 (isFullScreen)</h3>
+              <p>用于预览视频、游戏和直播全屏时的设置效果</p>
             </div>
             <label class="switch-toggle">
               <input type="checkbox" id="game-toggle">

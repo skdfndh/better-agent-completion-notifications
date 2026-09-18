@@ -56,3 +56,25 @@ test("UI 服务器能够正确托管独立弹窗 popup.html 与 popup.js", async
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("工作台提供全屏媒体提醒三档设置", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-reminder-fullscreen-ui-"));
+  const eventLogPath = join(directory, "events.ndjson");
+  const { createReminderUiServer } = await import("../src/ui/server.js");
+  const app = await createReminderUiServer({ eventLogPath });
+  const server = app.server;
+  await new Promise((res) => server.listen(0, "127.0.0.1", res));
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 3300;
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/`);
+    const html = await response.text();
+    assert.match(html, /全屏媒体提醒/);
+    assert.match(html, /data-fullscreen-mode="sound_only"/);
+    assert.match(html, /data-fullscreen-mode="disabled"/);
+  } finally {
+    await new Promise((res) => server.close(res));
+    await rm(directory, { recursive: true, force: true });
+  }
+});

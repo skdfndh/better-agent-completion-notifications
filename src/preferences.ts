@@ -1,14 +1,16 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { ReminderMode, ReminderPreferences } from "./types.ts";
+import type { FullscreenReminderMode, ReminderMode, ReminderPreferences } from "./types.ts";
 
 export const DEFAULT_PREFERENCES: ReminderPreferences = {
   mode: "light",
   soundEnabled: true,
   workbenchServiceEnabled: true,
+  fullscreenReminderMode: "normal",
 };
 
 const REMINDER_MODES: readonly ReminderMode[] = ["blocking", "light", "hidden"];
+const FULLSCREEN_REMINDER_MODES: readonly FullscreenReminderMode[] = ["normal", "sound_only", "disabled"];
 
 function normalizePreferences(value: unknown): ReminderPreferences | undefined {
   if (typeof value !== "object" || value === null) {
@@ -30,6 +32,10 @@ function normalizePreferences(value: unknown): ReminderPreferences | undefined {
     workbenchServiceEnabled: typeof candidate.workbenchServiceEnabled === "boolean"
       ? candidate.workbenchServiceEnabled
       : DEFAULT_PREFERENCES.workbenchServiceEnabled,
+    fullscreenReminderMode: typeof candidate.fullscreenReminderMode === "string" &&
+      FULLSCREEN_REMINDER_MODES.includes(candidate.fullscreenReminderMode as FullscreenReminderMode)
+      ? candidate.fullscreenReminderMode as FullscreenReminderMode
+      : DEFAULT_PREFERENCES.fullscreenReminderMode,
   };
 }
 

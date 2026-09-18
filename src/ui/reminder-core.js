@@ -21,6 +21,7 @@ const SPECIAL_STATUSES = [
 export const DEFAULT_PREFERENCES = {
   mode: "light",
   soundEnabled: true,
+  fullscreenReminderMode: "normal",
 };
 
 function visualToneFor(status) {
@@ -85,12 +86,20 @@ export function validateTaskEvent(value) {
 }
 
 export function decideReminder(event, preferences, runtime, createReminderId) {
-  if (runtime.isGameFullScreen) {
-    return { kind: "suppressed", reason: "game-fullscreen" };
-  }
-
   if (preferences.mode === "hidden") {
     return { kind: "suppressed", reason: "hidden-mode" };
+  }
+
+  if (runtime.isFullScreen || runtime.isGameFullScreen) {
+    if (preferences.fullscreenReminderMode === "disabled") {
+      return { kind: "suppressed", reason: "fullscreen-disabled" };
+    }
+
+    if (preferences.fullscreenReminderMode === "sound_only") {
+      return preferences.soundEnabled
+        ? { kind: "sound-only", soundCue: soundCueFor(event.status) }
+        : { kind: "sound-only" };
+    }
   }
 
   const isBlocking = preferences.mode === "blocking";
@@ -130,7 +139,7 @@ export class ReminderService {
     return { ...this.preferences };
   }
 
-  receive(rawEvent, runtime = { isGameFullScreen: false }) {
+  receive(rawEvent, runtime = { isFullScreen: false }) {
     const event = validateTaskEvent(rawEvent);
     const decision = decideReminder(event, this.preferences, runtime, this.createReminderId);
 

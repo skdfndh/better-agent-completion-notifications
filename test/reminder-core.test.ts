@@ -26,7 +26,7 @@ test("拒绝未知任务状态", () => {
 
 test("轻提醒的正常完成事件在五秒后自动关闭", () => {
   const event = validateTaskEvent(completedEvent);
-  const decision = decideReminder(event, DEFAULT_PREFERENCES, { isGameFullScreen: false }, () => "r-1");
+  const decision = decideReminder(event, DEFAULT_PREFERENCES, { isFullScreen: false }, () => "r-1");
 
   assert.equal(decision.kind, "display");
   if (decision.kind !== "display") return;
@@ -37,7 +37,7 @@ test("轻提醒的正常完成事件在五秒后自动关闭", () => {
 
 test("特殊状态在轻提醒中持续显示并使用对应语义", () => {
   const event = validateTaskEvent({ ...completedEvent, status: "failed" });
-  const decision = decideReminder(event, DEFAULT_PREFERENCES, { isGameFullScreen: false }, () => "r-2");
+  const decision = decideReminder(event, DEFAULT_PREFERENCES, { isFullScreen: false }, () => "r-2");
 
   assert.equal(decision.kind, "display");
   if (decision.kind !== "display") return;
@@ -46,13 +46,30 @@ test("特殊状态在轻提醒中持续显示并使用对应语义", () => {
   assert.equal(decision.presentation.soundCue, "error");
 });
 
-test("隐藏模式和游戏全屏均不展示提醒", () => {
+test("隐藏模式和全屏完全关闭均不展示提醒", () => {
   const event = validateTaskEvent(completedEvent);
-  const hidden = decideReminder(event, { ...DEFAULT_PREFERENCES, mode: "hidden" }, { isGameFullScreen: false }, () => "r-3");
-  const game = decideReminder(event, DEFAULT_PREFERENCES, { isGameFullScreen: true }, () => "r-4");
+  const hidden = decideReminder(event, { ...DEFAULT_PREFERENCES, mode: "hidden" }, { isFullScreen: false }, () => "r-3");
+  const fullscreenDisabled = decideReminder(
+    event,
+    { ...DEFAULT_PREFERENCES, fullscreenReminderMode: "disabled" },
+    { isFullScreen: true },
+    () => "r-4",
+  );
 
   assert.deepEqual(hidden, { kind: "suppressed", reason: "hidden-mode" });
-  assert.deepEqual(game, { kind: "suppressed", reason: "game-fullscreen" });
+  assert.deepEqual(fullscreenDisabled, { kind: "suppressed", reason: "fullscreen-disabled" });
+});
+
+test("全屏仅声音不创建展示提醒", () => {
+  const event = validateTaskEvent({ ...completedEvent, status: "needs_input" });
+  const decision = decideReminder(
+    event,
+    { ...DEFAULT_PREFERENCES, fullscreenReminderMode: "sound_only" },
+    { isFullScreen: true },
+    () => "r-fullscreen",
+  );
+
+  assert.deepEqual(decision, { kind: "sound-only", soundCue: "attention" });
 });
 
 test("遮挡提醒必须通过确认关闭，未来 UI 可订阅操作结果", () => {
@@ -60,7 +77,7 @@ test("遮挡提醒必须通过确认关闭，未来 UI 可订阅操作结果", (
   const service = new ReminderService({ ...DEFAULT_PREFERENCES, mode: "blocking" }, () => "r-5");
   service.subscribe((change) => changes.push(change.kind));
 
-  const decision = service.receive(completedEvent, { isGameFullScreen: false });
+  const decision = service.receive(completedEvent, { isFullScreen: false });
   assert.equal(decision.kind, "display");
   if (decision.kind !== "display") return;
 
@@ -87,6 +104,7 @@ test("旧偏好文件默认启用工作台后台服务", async () => {
 
   const preferences = await new JsonPreferencesStore(filePath).load();
   assert.equal(preferences.workbenchServiceEnabled, true);
+  assert.equal(preferences.fullscreenReminderMode, "normal");
   assert.equal(preferences.soundEnabled, false);
 });
 
