@@ -15,9 +15,12 @@ $openWorkbenchScript = Join-Path $PSScriptRoot 'open-workbench.ps1'
 $arguments = "-NoProfile -WindowStyle Hidden -File `"$watchdogScript`" -WorkspacePath `"$WorkspacePath`""
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
 $trigger = New-ScheduledTaskTrigger -AtLogOn
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description '随 Codex 启停的本地任务提醒守护器' -Force | Out-Null
-Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden
+$registeredTask = Get-ScheduledTask -TaskName $taskName
+if ($registeredTask.State -ne 'Running') {
+  Start-ScheduledTask -TaskName $taskName
+}
 
 $desktopPath = [Environment]::GetFolderPath('Desktop')
 $shortcutPath = Join-Path $desktopPath 'Codex 提醒工作台.lnk'
