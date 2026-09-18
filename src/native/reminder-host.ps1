@@ -597,36 +597,36 @@ function Show-ReminderWindow($eventData) {
       $progressContainer.Child = $progressFill
       $cardGrid.Children.Add($progressContainer) | Out-Null
 
-      # 倒计时平滑驱动与悬停暂停
+      # 使用绝对截止时间，避免计时回调调度抖动缩短或延长展示时长。
       $totalDurationMs = 5000
-      $remainingMs = 5000
       $tickIntervalMs = 40
-      $script:isPaused = $false
+      $timerState = [PSCustomObject]@{
+        DeadlineUtc = [DateTime]::UtcNow.AddMilliseconds($totalDurationMs)
+        Timer = $null
+        TickCount = 0
+      }
 
-      $cardBorder.Add_MouseEnter({
-        $script:isPaused = $true
-      })
-      $cardBorder.Add_MouseLeave({
-        $script:isPaused = $false
-      })
-
-      $script:activeReminderWindow = $window
       $progressTimer = New-Object System.Windows.Threading.DispatcherTimer
       $progressTimer.Interval = [TimeSpan]::FromMilliseconds($tickIntervalMs)
+      $timerState.Timer = $progressTimer
+      $window.Tag = $timerState
       $progressTimer.Add_Tick({
-        if (-not $script:isPaused) {
-          $remainingMs -= $tickIntervalMs
-          if ($remainingMs -le 0) {
-            $this.Stop()
-            if ($script:activeReminderWindow -and $script:activeReminderWindow.IsVisible) {
-              $script:activeReminderWindow.Close()
-            }
-          } else {
-            $ratio = [Math]::Max(0, $remainingMs / $totalDurationMs)
-            $progressFill.Width = $cardWidth * $ratio
-          }
+        $timerState.TickCount += 1
+        if ($timerState.TickCount -eq 1) {
+          Write-Diagnostic "自动关闭计时已开始：$($eventData.taskId)"
         }
-      })
+        $remainingMs = [Math]::Max(0, ($timerState.DeadlineUtc - [DateTime]::UtcNow).TotalMilliseconds)
+        if ($remainingMs -le 0) {
+          $timerState.Timer.Stop()
+          if ($window.IsVisible) {
+            Write-Diagnostic "自动关闭提醒：$($eventData.taskId)"
+            $window.Close()
+          }
+        } else {
+          $progressFill.Width = $cardWidth * ($remainingMs / $totalDurationMs)
+        }
+      }.GetNewClosure())
+      $window.Add_Closed({ $timerState.Timer.Stop() }.GetNewClosure())
       $progressTimer.Start()
     }
 
@@ -635,7 +635,6 @@ function Show-ReminderWindow($eventData) {
     $window.Content = $outerGrid
   }
 
-  $script:activeReminderWindow = $window
   $window.Show()
 }
 
