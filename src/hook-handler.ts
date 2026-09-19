@@ -1,5 +1,6 @@
-import { mapCodexHookEvent } from "./codex-hooks.ts";
-import { appendTaskEvent } from "./event-log.ts";
+import { mapAgentHookEvent } from "./agent-adapters.ts";
+import { dispatchTaskEvent } from "./event-dispatcher.ts";
+import { AGENT_SOURCES, type AgentSource } from "./types.ts";
 
 async function readStandardInput(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -10,18 +11,24 @@ async function readStandardInput(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-const rawInput = await readStandardInput();
-
-function resolveEventLogPath(): string | undefined {
-  return process.env.CODEX_TASK_REMINDER_EVENTS_PATH;
+function resolveSource(argumentsAfterScript: string[]): AgentSource {
+  const sourceIndex = argumentsAfterScript.indexOf("--source");
+  const source = sourceIndex === -1 ? "codex" : argumentsAfterScript[sourceIndex + 1];
+  if (!(AGENT_SOURCES as readonly string[]).includes(source)) {
+    throw new Error("无效的任务提醒来源。");
+  }
+  return source as AgentSource;
 }
 
 try {
+  const rawInput = await readStandardInput();
   const payload = JSON.parse(rawInput) as unknown;
-  const event = mapCodexHookEvent(payload);
+  const source = resolveSource(process.argv.slice(2));
+  const event = mapAgentHookEvent(source, payload);
   if (event) {
-    await appendTaskEvent(event, resolveEventLogPath());
+    await dispatchTaskEvent(event);
   }
-} catch {
-  // 钩子失败不能干扰 Codex 的正常生命周期。
+} catch (error) {
+  console.error(error instanceof Error ? error.message : "任务提醒分发失败。");
+  process.exitCode = 1;
 }
