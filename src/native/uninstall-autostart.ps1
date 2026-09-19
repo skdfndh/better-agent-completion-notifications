@@ -35,10 +35,11 @@ foreach ($reminderProcess in $reminderProcesses) {
 
 if (Test-Path -LiteralPath $HooksPath) {
   $hookDocument = Get-Content -LiteralPath $HooksPath -Raw -Encoding UTF8 | ConvertFrom-Json
-  $projectMarker = [Regex]::Escape((Split-Path -Parent $PSScriptRoot))
+  $handlerPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'hook-handler.ts'
+  $projectMarker = [Regex]::Escape($handlerPath.Replace('\', '\\'))
   foreach ($eventName in @('Stop', 'PermissionRequest', 'Interrupt', 'SessionStart')) {
     if (-not $hookDocument.hooks.$eventName) { continue }
-    $pattern = if ($eventName -eq 'SessionStart') { 'reminder-session-start\.ps1' } else { 'hook-handler\.ts.*--source codex' }
+    $pattern = if ($eventName -eq 'SessionStart') { 'reminder-session-start\.ps1' } else { "$projectMarker.*--source codex" }
     $remaining = @($hookDocument.hooks.$eventName | Where-Object { ($_ | ConvertTo-Json -Depth 10) -notmatch $pattern })
     if ($remaining.Count -gt 0) { $hookDocument.hooks | Add-Member -Force -NotePropertyName $eventName -NotePropertyValue @($remaining) }
     else { $hookDocument.hooks.PSObject.Properties.Remove($eventName) }

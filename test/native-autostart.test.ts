@@ -342,7 +342,10 @@ test("Codex Hook 安装迁移仅替换项目条目", async () => {
   const escapedHooksPath = toPowerShellLiteral(hooksPath);
   await writeFile(hooksPath, JSON.stringify({
     hooks: {
-      Stop: [{ hooks: [{ type: "command", command: "user-owned-command" }] }],
+      Stop: [
+        { hooks: [{ type: "command", command: "user-owned-command" }] },
+        { hooks: [{ type: "command", command: "node C:\\Other\\src\\hook-handler.ts --source codex" }] },
+      ],
       SessionStart: [{ hooks: [{ type: "command", command: "user-owned-session-start" }] }],
     },
   }), "utf8");
@@ -351,6 +354,7 @@ test("Codex Hook 安装迁移仅替换项目条目", async () => {
     await runPowerShell(`& '${escapedInstallerScript}' -WorkspacePath '${escapedDirectory}' -HooksPath '${escapedHooksPath}' -StartupPath '${escapedDirectory}' -TaskName 'CodexTaskReminderWatchdog-Test-${randomUUID()}'`);
     const installed = JSON.parse(await readFile(hooksPath, "utf8"));
     assert.equal(installed.hooks.Stop[0].hooks[0].command, "user-owned-command");
+    assert.equal(installed.hooks.Stop[1].hooks[0].command, "node C:\\Other\\src\\hook-handler.ts --source codex");
     assert.equal(installed.hooks.SessionStart[0].hooks[0].command, "user-owned-session-start");
     const projectCommands = JSON.stringify(installed.hooks);
     assert.match(projectCommands, /hook-handler\.ts.*--source codex/);
@@ -360,8 +364,10 @@ test("Codex Hook 安装迁移仅替换项目条目", async () => {
     await runPowerShell(`& '${escapedUninstallScript}' -HooksPath '${escapedHooksPath}' -StartupPath '${escapedDirectory}' -TaskName 'CodexTaskReminderWatchdog-Test-${randomUUID()}'`);
     const uninstalled = await readFile(hooksPath, "utf8");
     assert.match(uninstalled, /user-owned-command/);
+    const remainingCodexCommands = JSON.parse(uninstalled).hooks.Stop.flatMap((group: { hooks: { command: string }[] }) => group.hooks.map((hook) => hook.command));
+    assert.ok(remainingCodexCommands.includes("node C:\\Other\\src\\hook-handler.ts --source codex"));
     assert.match(uninstalled, /user-owned-session-start/);
-    assert.doesNotMatch(uninstalled, /hook-handler\.ts/);
+    assert.equal(JSON.parse(uninstalled).hooks.Stop.length, 2);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -374,7 +380,10 @@ test("可选 Agent 安装器只修改项目自己的 Hook", async () => {
   const escapedConfigPath = toPowerShellLiteral(configPath);
   await writeFile(configPath, JSON.stringify({
     hooks: {
-      Stop: [{ hooks: [{ type: "command", command: "user-owned-command" }] }],
+      Stop: [
+        { hooks: [{ type: "command", command: "user-owned-command" }] },
+        { hooks: [{ type: "command", command: "node C:\\Other\\src\\hook-handler.ts --source antigravity" }] },
+      ],
     },
   }), "utf8");
 
@@ -382,12 +391,24 @@ test("可选 Agent 安装器只修改项目自己的 Hook", async () => {
     await runPowerShell(`& '${escapedAgentConfigScript}' -Source antigravity -Action install -ConfigPath '${escapedConfigPath}'`);
     const installed = await readFile(configPath, "utf8");
     assert.match(installed, /user-owned-command/);
+    const installedAgentCommands = JSON.parse(installed).hooks.Stop.flatMap((group: { hooks: { command: string }[] }) => group.hooks.map((hook) => hook.command));
+    assert.ok(installedAgentCommands.includes("node C:\\Other\\src\\hook-handler.ts --source antigravity"));
     assert.match(installed, /hook-handler\.ts.*--source antigravity/);
 
     await runPowerShell(`& '${escapedAgentConfigScript}' -Source antigravity -Action uninstall -ConfigPath '${escapedConfigPath}'`);
     const uninstalled = await readFile(configPath, "utf8");
     assert.match(uninstalled, /user-owned-command/);
-    assert.doesNotMatch(uninstalled, /hook-handler\.ts.*--source antigravity/);
+    const remainingAgentCommands = JSON.parse(uninstalled).hooks.Stop.flatMap((group: { hooks: { command: string }[] }) => group.hooks.map((hook) => hook.command));
+    assert.ok(remainingAgentCommands.includes("node C:\\Other\\src\\hook-handler.ts --source antigravity"));
+    assert.equal(JSON.parse(uninstalled).hooks.Stop.length, 2);
+
+    await runPowerShell(`& '${escapedAgentConfigScript}' -Source dsh -Action install -ConfigPath '${escapedConfigPath}'`);
+    const dshInstalled = JSON.parse(await readFile(configPath, "utf8"));
+    assert.match(dshInstalled.hooks["turn/end"][0].hooks[0].command, /hook-handler\.ts.*--source dsh/);
+
+    await runPowerShell(`& '${escapedAgentConfigScript}' -Source dsh -Action uninstall -ConfigPath '${escapedConfigPath}'`);
+    const dshUninstalled = JSON.parse(await readFile(configPath, "utf8"));
+    assert.equal(dshUninstalled.hooks["turn/end"], undefined);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
