@@ -18,6 +18,7 @@ const desktopHostSupervisorScript = join(projectPath, "src", "native", "reminder
 const hiddenLauncherScript = join(projectPath, "src", "native", "reminder-hidden-launcher.vbs");
 const sessionStartScript = join(projectPath, "src", "native", "reminder-session-start.ps1");
 const sessionLifecycleInstallerScript = join(projectPath, "src", "native", "install-session-lifecycle.ps1");
+const uninstallAutostartScript = join(projectPath, "src", "native", "uninstall-autostart.ps1");
 
 function toPowerShellLiteral(value: string) {
   return value.replaceAll("'", "''");
@@ -309,7 +310,7 @@ test("会话启动器按需启动桌面提醒宿主", async () => {
   }
 });
 
-test("会话模式安装器写入 SessionStart 钩子", async () => {
+test("会话模式安装器写入 Codex 事件钩子而非 SessionStart", async () => {
   const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-session-install-"));
   const hooksPath = join(directory, "hooks.json");
   await writeFile(hooksPath, JSON.stringify({ description: "test", hooks: {} }), "utf8");
@@ -324,8 +325,42 @@ test("会话模式安装器写入 SessionStart 钩子", async () => {
       & '${escapedInstallerScript}' -WorkspacePath '${escapedDirectory}' -HooksPath '${escapedHooksPath}' -StartupPath '${escapedStartupPath}' -TaskName 'CodexTaskReminderWatchdog-Test-${randomUUID()}'
     `);
     const hooks = JSON.parse(await readFile(hooksPath, "utf8"));
-    assert.equal(hooks.hooks.SessionStart[0].matcher, "startup|resume|clear");
-    assert.match(hooks.hooks.SessionStart[0].hooks[0].commandWindows, /wscript\.exe/i);
+    assert.equal(hooks.hooks.SessionStart, undefined);
+    assert.match(hooks.hooks.Stop[0].hooks[0].commandWindows, /hook-handler\.ts.*--source codex/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Codex Hook 安装迁移仅替换项目条目", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-hook-migration-"));
+  const hooksPath = join(directory, "hooks.json");
+  const escapedInstallerScript = toPowerShellLiteral(sessionLifecycleInstallerScript);
+  const escapedUninstallScript = toPowerShellLiteral(uninstallAutostartScript);
+  const escapedDirectory = toPowerShellLiteral(directory);
+  const escapedHooksPath = toPowerShellLiteral(hooksPath);
+  await writeFile(hooksPath, JSON.stringify({
+    hooks: {
+      Stop: [{ hooks: [{ type: "command", command: "user-owned-command" }] }],
+      SessionStart: [{ hooks: [{ type: "command", command: "user-owned-session-start" }] }],
+    },
+  }), "utf8");
+
+  try {
+    await runPowerShell(`& '${escapedInstallerScript}' -WorkspacePath '${escapedDirectory}' -HooksPath '${escapedHooksPath}' -StartupPath '${escapedDirectory}' -TaskName 'CodexTaskReminderWatchdog-Test-${randomUUID()}'`);
+    const installed = JSON.parse(await readFile(hooksPath, "utf8"));
+    assert.equal(installed.hooks.Stop[0].hooks[0].command, "user-owned-command");
+    assert.equal(installed.hooks.SessionStart[0].hooks[0].command, "user-owned-session-start");
+    const projectCommands = JSON.stringify(installed.hooks);
+    assert.match(projectCommands, /hook-handler\.ts.*--source codex/);
+    assert.match(projectCommands, /PermissionRequest/);
+    assert.match(projectCommands, /Interrupt/);
+
+    await runPowerShell(`& '${escapedUninstallScript}' -HooksPath '${escapedHooksPath}' -StartupPath '${escapedDirectory}' -TaskName 'CodexTaskReminderWatchdog-Test-${randomUUID()}'`);
+    const uninstalled = await readFile(hooksPath, "utf8");
+    assert.match(uninstalled, /user-owned-command/);
+    assert.match(uninstalled, /user-owned-session-start/);
+    assert.doesNotMatch(uninstalled, /hook-handler\.ts/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

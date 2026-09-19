@@ -1,6 +1,7 @@
 param(
   [string]$TaskName = 'CodexTaskReminderWatchdog',
-  [string]$StartupPath
+  [string]$StartupPath,
+  [string]$HooksPath = (Join-Path $env:USERPROFILE '.codex\hooks.json')
 )
 
 $taskName = $TaskName
@@ -30,4 +31,18 @@ $reminderProcesses = @(Get-CimInstance Win32_Process | Where-Object {
 })
 foreach ($reminderProcess in $reminderProcesses) {
   Stop-Process -Id $reminderProcess.ProcessId -ErrorAction SilentlyContinue
+}
+
+if (Test-Path -LiteralPath $HooksPath) {
+  $hookDocument = Get-Content -LiteralPath $HooksPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  $projectMarker = [Regex]::Escape((Split-Path -Parent $PSScriptRoot))
+  foreach ($eventName in @('Stop', 'PermissionRequest', 'Interrupt', 'SessionStart')) {
+    if (-not $hookDocument.hooks.$eventName) { continue }
+    $pattern = if ($eventName -eq 'SessionStart') { 'reminder-session-start\.ps1' } else { 'hook-handler\.ts.*--source codex' }
+    $remaining = @($hookDocument.hooks.$eventName | Where-Object { ($_ | ConvertTo-Json -Depth 10) -notmatch $pattern })
+    if ($remaining.Count -gt 0) { $hookDocument.hooks | Add-Member -Force -NotePropertyName $eventName -NotePropertyValue @($remaining) }
+    else { $hookDocument.hooks.PSObject.Properties.Remove($eventName) }
+  }
+  $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($HooksPath, ($hookDocument | ConvertTo-Json -Depth 10), $utf8WithoutBom)
 }
