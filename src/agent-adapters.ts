@@ -58,7 +58,48 @@ function mapStandardHook(source: Exclude<AgentSource, "dsh">, payload: Record<st
   return createEvent(source, sessionId, turnId, hookEventName, mapped[0] as TaskStatus, mapped[1], mapped[2], occurredAt);
 }
 
+function mapAntigravityStop(payload: Record<string, unknown>, occurredAt: string): TaskEvent | undefined {
+  const conversationId = text(payload.conversationId);
+  const executionNum = typeof payload.executionNum === "number" || typeof payload.executionNum === "string"
+    ? String(payload.executionNum)
+    : undefined;
+  const terminationReason = text(payload.terminationReason);
+  if (payload.fullyIdle !== true || !conversationId || !executionNum || !terminationReason) return undefined;
+
+  const status = terminationReason === "model_stop"
+    ? "completed"
+    : terminationReason === "error" || terminationReason === "max_steps_exceeded"
+      ? "failed"
+      : "interrupted";
+  const title = status === "completed"
+    ? "Antigravity 任务轮次已结束"
+    : status === "failed"
+      ? "Antigravity 任务执行失败"
+      : "Antigravity 任务已中断";
+  const summary = status === "completed"
+    ? "Antigravity 已结束当前任务轮次。"
+    : status === "failed"
+      ? "Antigravity 当前任务轮次执行失败。"
+      : "Antigravity 当前任务轮次已中断。";
+  return createEvent("antigravity", conversationId, executionNum, `Stop:${terminationReason}`, status, title, summary, occurredAt);
+}
+
 function mapDshHook(payload: Record<string, unknown>, occurredAt: string): TaskEvent | undefined {
+  const bridgeSessionId = text(payload.session_id);
+  const bridgeTurnId = text(payload.turn_id);
+  if (text(payload.hook_event_name) === "Stop" && bridgeSessionId && bridgeTurnId) {
+    return createEvent(
+      "dsh",
+      bridgeSessionId,
+      bridgeTurnId,
+      "bridge:Stop",
+      "completed",
+      "DSH 任务轮次已结束",
+      "DSH 已结束当前任务轮次。",
+      occurredAt,
+    );
+  }
+
   const eventName = text(payload.event);
   const sessionId = nestedText(payload, "session", "id");
   const turnId = nestedText(payload, "turn", "id");
@@ -93,7 +134,9 @@ function mapDshHook(payload: Record<string, unknown>, occurredAt: string): TaskE
 
 export function mapAgentHookEvent(source: AgentSource, payload: unknown, occurredAt = new Date().toISOString()): TaskEvent | undefined {
   if (!isRecord(payload)) return undefined;
-  return source === "dsh"
-    ? mapDshHook(payload, occurredAt)
-    : mapStandardHook(source, payload, occurredAt);
+  if (source === "dsh") return mapDshHook(payload, occurredAt);
+  if (source === "antigravity" && ("conversationId" in payload || "executionNum" in payload || "fullyIdle" in payload)) {
+    return mapAntigravityStop(payload, occurredAt);
+  }
+  return mapStandardHook(source, payload, occurredAt);
 }

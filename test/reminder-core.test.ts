@@ -183,3 +183,57 @@ test("各 Agent 映射状态和稳定事件标识", () => {
   assert.equal(mapAgentHookEvent("dsh", dshCompleted)?.status, "completed");
   assert.equal(mapAgentHookEvent("dsh", dshFailed)?.status, "failed");
 });
+
+test("Antigravity 仅在完全空闲时映射真实 Stop 负载", () => {
+  const pending = mapAgentHookEvent("antigravity", {
+    conversationId: "conversation-1",
+    executionNum: 2,
+    terminationReason: "model_stop",
+    fullyIdle: false,
+  });
+  assert.equal(pending, undefined);
+
+  const failed = mapAgentHookEvent("antigravity", {
+    conversationId: "conversation-1",
+    executionNum: 2,
+    terminationReason: "error",
+    fullyIdle: true,
+  });
+  assert.equal(failed?.status, "failed");
+  assert.equal(failed?.eventId, "antigravity:conversation-1:2:Stop:error");
+});
+
+test("DSH bridge 的 Stop 负载保持 dsh 来源", () => {
+  const event = mapAgentHookEvent("dsh", {
+    hook_event_name: "Stop",
+    session_id: "dsh-session",
+    turn_id: "3",
+  });
+  assert.equal(event?.source, "dsh");
+  assert.equal(event?.status, "completed");
+  assert.equal(event?.eventId, "dsh:dsh-session:3:bridge:Stop");
+});
+
+test("来源开关只持久化指定 Agent 的启用状态", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-agent-preferences-"));
+  const filePath = join(directory, "preferences.json");
+  await writeFile(filePath, JSON.stringify({
+    mode: "blocking",
+    soundEnabled: false,
+    workbenchServiceEnabled: false,
+    fullscreenReminderMode: "sound_only",
+    enabledSources: { codex: true, antigravity: false, dsh: true },
+  }), "utf8");
+
+  const module = await import("../src/agent-preferences.ts").catch(() => undefined);
+  assert.equal(typeof module?.setAgentSourceEnabled, "function");
+  await module?.setAgentSourceEnabled("antigravity", true, { filePath });
+
+  assert.deepEqual(await new JsonPreferencesStore(filePath).load(), {
+    mode: "blocking",
+    soundEnabled: false,
+    workbenchServiceEnabled: false,
+    fullscreenReminderMode: "sound_only",
+    enabledSources: { codex: true, antigravity: true, dsh: true },
+  });
+});
