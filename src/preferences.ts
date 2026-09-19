@@ -1,16 +1,34 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { FullscreenReminderMode, ReminderMode, ReminderPreferences } from "./types.ts";
+import type { AgentSource, EnabledSources, FullscreenReminderMode, ReminderMode, ReminderPreferences } from "./types.ts";
+
+const DEFAULT_ENABLED_SOURCES: EnabledSources = {
+  codex: true,
+  antigravity: false,
+  dsh: false,
+};
 
 export const DEFAULT_PREFERENCES: ReminderPreferences = {
   mode: "light",
   soundEnabled: true,
   workbenchServiceEnabled: true,
   fullscreenReminderMode: "normal",
+  enabledSources: DEFAULT_ENABLED_SOURCES,
 };
 
 const REMINDER_MODES: readonly ReminderMode[] = ["blocking", "light", "hidden"];
 const FULLSCREEN_REMINDER_MODES: readonly FullscreenReminderMode[] = ["normal", "sound_only", "disabled"];
+const AGENT_SOURCES: readonly AgentSource[] = ["codex", "antigravity", "dsh"];
+
+function normalizeEnabledSources(value: unknown): EnabledSources {
+  const candidate = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+  return AGENT_SOURCES.reduce<EnabledSources>((sources, source) => {
+    sources[source] = typeof candidate[source] === "boolean"
+      ? candidate[source]
+      : DEFAULT_ENABLED_SOURCES[source];
+    return sources;
+  }, { ...DEFAULT_ENABLED_SOURCES });
+}
 
 function normalizePreferences(value: unknown): ReminderPreferences | undefined {
   if (typeof value !== "object" || value === null) {
@@ -36,6 +54,7 @@ function normalizePreferences(value: unknown): ReminderPreferences | undefined {
       FULLSCREEN_REMINDER_MODES.includes(candidate.fullscreenReminderMode as FullscreenReminderMode)
       ? candidate.fullscreenReminderMode as FullscreenReminderMode
       : DEFAULT_PREFERENCES.fullscreenReminderMode,
+    enabledSources: normalizeEnabledSources(candidate.enabledSources),
   };
 }
 

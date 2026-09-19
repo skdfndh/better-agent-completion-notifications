@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { validateTaskEvent } from "../src/events.ts";
 import { mapCodexHookEvent } from "../src/codex-hooks.ts";
+import { mapAgentHookEvent } from "../src/agent-adapters.ts";
 import { appendTaskEvent, defaultEventLogPath } from "../src/event-log.ts";
 import { DEFAULT_PREFERENCES, JsonPreferencesStore } from "../src/preferences.ts";
 import { decideReminder } from "../src/policy.ts";
@@ -140,4 +141,45 @@ test("各工作区的钩子默认写入同一个用户级事件日志", () => {
     defaultEventLogPath("C:\\Users\\tester\\AppData\\Roaming"),
     join("C:\\Users\\tester\\AppData\\Roaming", "CodexTaskReminder", "events.ndjson"),
   );
+});
+
+test("旧事件和旧偏好回退到 Codex", async () => {
+  const event = validateTaskEvent(completedEvent);
+  assert.equal(event.source, "codex");
+  assert.match(event.eventId, /^codex:/);
+
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-legacy-preferences-"));
+  const filePath = join(directory, "preferences.json");
+  await writeFile(filePath, JSON.stringify({ mode: "light", soundEnabled: true }), "utf8");
+
+  assert.deepEqual((await new JsonPreferencesStore(filePath).load()).enabledSources, {
+    codex: true,
+    antigravity: false,
+    dsh: false,
+  });
+});
+
+test("各 Agent 映射状态和稳定事件标识", () => {
+  const codexStop = {
+    hook_event_name: "Stop",
+    session_id: "session-1",
+    turn_id: "turn-1",
+  };
+  const antigravityStop = {
+    hook_event_name: "Stop",
+    session_id: "antigravity-session",
+    turn_id: "antigravity-turn",
+  };
+  const dshCompleted = {
+    event: "turn/end",
+    session: { id: "dsh-session" },
+    turn: { id: "dsh-turn" },
+    reason: "completed",
+  };
+  const dshFailed = { ...dshCompleted, reason: "error" };
+
+  assert.equal(mapAgentHookEvent("codex", codexStop)?.eventId, "codex:session-1:turn-1:Stop");
+  assert.equal(mapAgentHookEvent("antigravity", antigravityStop)?.source, "antigravity");
+  assert.equal(mapAgentHookEvent("dsh", dshCompleted)?.status, "completed");
+  assert.equal(mapAgentHookEvent("dsh", dshFailed)?.status, "failed");
 });

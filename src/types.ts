@@ -7,13 +7,19 @@ export const TASK_STATUSES = [
 ] as const;
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
+export const AGENT_SOURCES = ["codex", "antigravity", "dsh"] as const;
+export type AgentSource = (typeof AGENT_SOURCES)[number];
+export type EnabledSources = Record<AgentSource, boolean>;
 
 export interface TaskEvent {
   taskId: string;
+  eventId: string;
+  source: AgentSource;
   status: TaskStatus;
   title: string;
   occurredAt: string;
   summary?: string;
+  sessionId?: string;
 }
 
 export type ReminderMode = "blocking" | "light" | "hidden";
@@ -24,6 +30,7 @@ export interface ReminderPreferences {
   soundEnabled: boolean;
   workbenchServiceEnabled: boolean;
   fullscreenReminderMode: FullscreenReminderMode;
+  enabledSources: EnabledSources;
 }
 
 export interface RuntimeContext {
