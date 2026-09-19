@@ -3,10 +3,9 @@
 ## 事件路径
 
 ```text
-Codex / Antigravity / DSH Hook
-              |
-              v
-        agent-adapters.ts
+Codex Hook -----------------------------+
+Antigravity Stop Hook ------------------+--> hook-handler.ts --> agent-adapters.ts
+DSH -> dsh-hooks-codex bridge -> Stop --+
               |
               v
  event-dispatcher.ts -- 审计日志 + 磁盘去重 + 一次性事件文件
@@ -27,8 +26,10 @@ Codex / Antigravity / DSH Hook
 - `src/ui/`：本地 HTTP 服务、工作台和独立弹窗。
 - `src/native/reminder-host.ps1`：读取一次性事件并展示 WPF 窗口。
 - `src/native/install-session-lifecycle.ps1`：Codex Hook 的可逆安装迁移。
-- `src/native/agent-config.ps1`：可选 Agent 配置的显式安装与卸载。
+- `src/native/agent-config.ps1`：Antigravity 全局 Hook 的可逆安装与卸载。
+- `src/native/install-dsh-bridge.ps1`：生成 DSH 的独立 Codex 兼容 Hook、安装官方 bridge bundle，并在失败时回滚。
+- `src/agent-preferences.ts`：安装器使用的来源开关持久化入口。
 
 ## 数据与隐私
 
-事件日志是诊断审计，不是运行时消息队列。事件文件、去重声明、偏好文件和诊断日志都属于本机运行数据，已被 `.gitignore` 排除。公开贡献请使用合成事件，避免提交真实任务标题、摘要、路径或日志。
+事件日志是诊断审计，不是运行时消息队列。事件文件、去重声明、偏好文件和诊断日志都属于本机运行数据，已被 `.gitignore` 排除。DSH bridge 使用项目拥有的 `%APPDATA%\CodexTaskReminder\dsh-hooks.json`，不读取凭据也不改写 `settings.yaml`。公开贡献请使用合成事件，避免提交真实任务标题、摘要、路径或日志。

@@ -10,6 +10,7 @@ $bundleName = 'better-codex-task-reminder-dsh-bridge'
 $projectPath = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $templatePath = Join-Path $PSScriptRoot 'dsh-bridge-template\package.json'
 $handlerPath = Join-Path $projectPath 'src\hook-handler.ts'
+$preferencesScript = Join-Path $projectPath 'src\agent-preferences.ts'
 $resolvedDshHome = if ($DshHome) { $DshHome } else { Join-Path $env:USERPROFILE '.dsh' }
 $profilePath = Join-Path $resolvedDshHome "profiles\$Profile"
 $profilePackagePath = Join-Path $profilePath 'package.json'
@@ -28,6 +29,13 @@ function Invoke-DshPlugin([string]$Operation, [string[]]$Arguments) {
   & $DshCliPath '@deepseek-ai/dsh' 'plugin' '--profile' $Profile $Operation @Arguments
   if ($LASTEXITCODE -ne 0) {
     throw "DSH plugin $Operation failed with exit code $LASTEXITCODE."
+  }
+}
+
+function Set-DshSourcePreference([string]$Enabled) {
+  & node --experimental-strip-types $preferencesScript --source dsh --enabled $Enabled
+  if ($LASTEXITCODE -ne 0) {
+    throw "Unable to update DSH source preference."
   }
 }
 
@@ -52,6 +60,7 @@ if ($Action -eq 'uninstall') {
   if (Test-Path -LiteralPath $bundlePath) {
     Remove-Item -LiteralPath $bundlePath -Recurse -Force
   }
+  Set-DshSourcePreference 'false'
   exit 0
 }
 
@@ -94,6 +103,7 @@ try {
   if (-not ((Test-Path -LiteralPath $dshHooksPath) -and (Test-Path -LiteralPath $bundlePackagePath) -and (Test-Path -LiteralPath $bundlePatchPath))) {
     throw 'DSH bridge runtime files could not be verified.'
   }
+  Set-DshSourcePreference 'true'
 } catch {
   if ($installed) {
     try {

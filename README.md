@@ -56,21 +56,23 @@ npm run hook:uninstall
 
 ## 可选 Antigravity 与 DSH 集成
 
-工作台中的来源复选框只控制是否展示该来源的提醒，不会自行修改第三方 Agent 配置。Antigravity 和 DSH 默认关闭；先在工作台启用来源，再明确指定该 Agent 的 Hook JSON 配置文件进行安装：
+这两项安装会自动启用工作台中的对应来源；卸载则自动关闭该来源，不会改变声音、全屏策略或其他 Agent 的设置。
+
+Antigravity 使用其全局 Hook 文件 `%USERPROFILE%\.gemini\config\hooks.json`。安装器只维护项目拥有的 `better-codex-task-reminder` 顶级键，保留其他 Hook：
 
 ```powershell
-npm run agent:install -- -Source antigravity -ConfigPath "C:\path\to\antigravity-hooks.json"
-npm run agent:install -- -Source dsh -ConfigPath "C:\path\to\dsh-hooks.json"
+npm run agent:antigravity:install
+npm run agent:antigravity:uninstall
 ```
 
-安装器分别写入 `Stop` 与 `turn/end` 命令 Hook，且只替换本项目自己的绝对路径条目。卸载使用相同的 `-Source` 与 `-ConfigPath`：
+DSH 使用官方 `@deepseek-ai/dsh-hooks-codex` bridge，并在当前用户的 `web` profile 添加本项目本地 bundle。首次安装会经 `npx` 获取 DSH CLI 与 bridge，因此需要网络；它不会读取或修改 `.dsh\.credentials.yaml`、`settings.yaml`、模型或 provider：
 
 ```powershell
-npm run agent:uninstall -- -Source antigravity -ConfigPath "C:\path\to\antigravity-hooks.json"
-npm run agent:uninstall -- -Source dsh -ConfigPath "C:\path\to\dsh-hooks.json"
+npm run agent:dsh:install
+npm run agent:dsh:uninstall
 ```
 
-不同 Agent 的实际配置文件位置由其安装方式决定；本项目不会猜测路径、扫描磁盘或在未明确指定时写入配置。请先确认目标 Agent 支持命令 Hook 与 JSON `hooks` 配置结构。
+DSH 的独立 Hook 配置位于 `%APPDATA%\CodexTaskReminder\dsh-hooks.json`，不会复用 Codex 的真实 Hook 文件。若 `web` profile 或 DSH CLI 不可用，安装会失败并清除本次生成的 Hook 与 bundle。旧的 `agent:install` / `agent:uninstall` 别名仅兼容 Antigravity。
 
 ## 配置
 
@@ -92,7 +94,7 @@ npm run demo
 ## 边界
 
 - 原生宿主目前不能通过公开接口直接跳转到指定 Agent 任务；“打开任务”可作为宿主桥接的扩展点。
-- Antigravity 与 DSH 的 Hook 格式和配置路径存在版本差异，需要用户明确提供兼容的配置文件。
+- DSH bridge 只运行同步的命令 Hook；若 DSH 官方 bridge 的配置协议发生变动，需要更新本项目的安装器。
 
 ## 许可证
 

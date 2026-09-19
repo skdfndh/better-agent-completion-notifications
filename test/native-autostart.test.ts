@@ -377,8 +377,10 @@ test("Codex Hook 安装迁移仅替换项目条目", async () => {
 test("Antigravity 安装器只修改项目自己的顶级 Hook", async () => {
   const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-agent-config-"));
   const configPath = join(directory, "agent-hooks.json");
+  const appDataPath = join(directory, "appdata");
   const escapedAgentConfigScript = toPowerShellLiteral(agentConfigScript);
   const escapedConfigPath = toPowerShellLiteral(configPath);
+  const escapedAppData = toPowerShellLiteral(appDataPath);
   await writeFile(configPath, JSON.stringify({
     "user-linter": {
       Stop: [{ type: "command", command: "user-owned-command" }],
@@ -386,20 +388,28 @@ test("Antigravity 安装器只修改项目自己的顶级 Hook", async () => {
   }), "utf8");
 
   try {
-    await runPowerShell(`& '${escapedAgentConfigScript}' -Source antigravity -Action install -ConfigPath '${escapedConfigPath}'`);
+    await runPowerShell(`
+      $env:APPDATA = '${escapedAppData}'
+      & '${escapedAgentConfigScript}' -Source antigravity -Action install -ConfigPath '${escapedConfigPath}'
+    `);
     const installed = JSON.parse(await readFile(configPath, "utf8"));
     assert.match(installed["better-codex-task-reminder"].Stop[0].command, /hook-handler\.ts.*--source antigravity/);
     assert.equal(installed["better-codex-task-reminder"].Stop[0].timeout, 5);
     assert.deepEqual(installed["user-linter"], {
       Stop: [{ type: "command", command: "user-owned-command" }],
     });
+    assert.equal(JSON.parse(await readFile(join(appDataPath, "CodexTaskReminder", "preferences.json"), "utf8")).enabledSources.antigravity, true);
 
-    await runPowerShell(`& '${escapedAgentConfigScript}' -Source antigravity -Action uninstall -ConfigPath '${escapedConfigPath}'`);
+    await runPowerShell(`
+      $env:APPDATA = '${escapedAppData}'
+      & '${escapedAgentConfigScript}' -Source antigravity -Action uninstall -ConfigPath '${escapedConfigPath}'
+    `);
     const uninstalled = JSON.parse(await readFile(configPath, "utf8"));
     assert.equal(uninstalled["better-codex-task-reminder"], undefined);
     assert.deepEqual(uninstalled["user-linter"], {
       Stop: [{ type: "command", command: "user-owned-command" }],
     });
+    assert.equal(JSON.parse(await readFile(join(appDataPath, "CodexTaskReminder", "preferences.json"), "utf8")).enabledSources.antigravity, false);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -408,12 +418,15 @@ test("Antigravity 安装器只修改项目自己的顶级 Hook", async () => {
 test("Antigravity 安装器默认写入用户 Gemini Hook 文件", async () => {
   const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-agent-home-"));
   const configPath = join(directory, ".gemini", "config", "hooks.json");
+  const appDataPath = join(directory, "appdata");
   const escapedAgentConfigScript = toPowerShellLiteral(agentConfigScript);
   const escapedDirectory = toPowerShellLiteral(directory);
+  const escapedAppData = toPowerShellLiteral(appDataPath);
 
   try {
     await runPowerShell(`
       $env:USERPROFILE = '${escapedDirectory}'
+      $env:APPDATA = '${escapedAppData}'
       & '${escapedAgentConfigScript}' -Source antigravity -Action install
     `);
     const installed = JSON.parse(await readFile(configPath, "utf8"));
@@ -458,6 +471,7 @@ test("DSH bridge 安装器使用独立同步 Hook 且卸载不影响其他 bundl
     assert.match(await readFile(fakeCliLogPath, "utf8"), /@deepseek-ai\/dsh plugin --profile web add/);
     assert.match(await readFile(join(bundlePath, "cordis.patch.yml"), "utf8"), /@deepseek-ai\/dsh-hooks-codex/);
     assert.equal(await readFile(settingsPath, "utf8"), settings);
+    assert.equal(JSON.parse(await readFile(join(appDataPath, "CodexTaskReminder", "preferences.json"), "utf8")).enabledSources.dsh, true);
 
     await writeFile(join(profilePath, "package.json"), JSON.stringify({
       name: "dsh-profile-web",
@@ -474,6 +488,7 @@ test("DSH bridge 安装器使用独立同步 Hook 且卸载不影响其他 bundl
     assert.equal(JSON.parse(await readFile(join(profilePath, "package.json"), "utf8")).dependencies["other-bundle"], "file:./other-bundle");
     await assert.rejects(() => readFile(dshHooksPath, "utf8"));
     await assert.rejects(() => stat(bundlePath));
+    assert.equal(JSON.parse(await readFile(join(appDataPath, "CodexTaskReminder", "preferences.json"), "utf8")).enabledSources.dsh, false);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -505,6 +520,36 @@ test("DSH bridge CLI 失败时回滚独立运行时文件", async () => {
     await assert.rejects(() => stat(join(runtimePath, "dsh-hooks.json")));
     await assert.rejects(() => stat(join(runtimePath, "dsh-bridge-bundle")));
     assert.equal(await readFile(settingsPath, "utf8"), settings);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("DSH bridge 缺少 profile 时报告目标绝对路径", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-dsh-profile-missing-"));
+  const dshHome = join(directory, "dsh");
+  const appDataPath = join(directory, "appdata");
+  const escapedInstaller = toPowerShellLiteral(dshBridgeInstallerScript);
+  const escapedDshHome = toPowerShellLiteral(dshHome);
+  const escapedAppData = toPowerShellLiteral(appDataPath);
+  const expectedProfilePath = join(dshHome, "profiles", "web");
+
+  try {
+    await assert.rejects(
+      () => runPowerShell(`
+        $env:APPDATA = '${escapedAppData}'
+        try {
+          & '${escapedInstaller}' -Action install -DshHome '${escapedDshHome}' -Profile web -DshCliPath fake-dsh.cmd
+        } catch {
+          [Console]::Error.WriteLine($_.Exception.Message)
+          exit 1
+        }
+      `),
+      (error: unknown) => {
+        const result = error as { stderr?: string };
+        return typeof result.stderr === "string" && result.stderr.includes(expectedProfilePath);
+      },
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

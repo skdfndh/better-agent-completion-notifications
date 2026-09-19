@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $projectPath = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $handlerPath = Join-Path $projectPath 'src\hook-handler.ts'
+$preferencesScript = Join-Path $projectPath 'src\agent-preferences.ts'
 $resolvedConfigPath = if ($ConfigPath) {
   $ConfigPath
 } else {
@@ -38,3 +39,9 @@ if ($directory -and -not (Test-Path -LiteralPath $directory)) {
 }
 $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($resolvedConfigPath, ($document | ConvertTo-Json -Depth 10), $utf8WithoutBom)
+
+$enabled = if ($Action -eq 'install') { 'true' } else { 'false' }
+& node --experimental-strip-types $preferencesScript --source antigravity --enabled $enabled
+if ($LASTEXITCODE -ne 0) {
+  throw "Unable to update Antigravity source preference."
+}

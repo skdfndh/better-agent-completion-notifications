@@ -1,6 +1,6 @@
 # Antigravity 与 DSH 原生集成实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 让本机 Antigravity IDE 与 DSH 使用其官方配置机制触发现有的一次性 Windows 任务提醒。
 
@@ -51,7 +51,7 @@
 - Consumes: Antigravity `Stop` JSON（`conversationId`、`executionNum`、`terminationReason`、`fullyIdle`）与 DSH bridge 的 Codex 风格 Stop JSON。
 - Produces: `mapAgentHookEvent("antigravity" | "dsh", payload)` 和 `setAgentSourceEnabled(source, enabled, options?)`。
 
-- [ ] **Step 1: 写入失败测试**
+- [x] **Step 1: 写入失败测试**
 
 ```ts
 test("Antigravity 仅在完全空闲时映射真实 Stop 负载", () => {
@@ -77,13 +77,13 @@ test("DSH bridge 的 Stop 负载保持 dsh 来源", () => {
 
 另写入偏好持久化测试：调用 `setAgentSourceEnabled("antigravity", true, { filePath })` 后仅该来源变为 `true`，其他来源和既有偏好不变。
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 运行：`node --experimental-strip-types --test test/reminder-core.test.ts`
 
 预期：真实 camelCase 字段与 DSH bridge Stop 尚未识别，来源偏好写入模块不存在。
 
-- [ ] **Step 3: 实现最小映射与来源偏好入口**
+- [x] **Step 3: 实现最小映射与来源偏好入口**
 
 在 `agent-adapters.ts` 增加一个仅处理真实 Antigravity Stop 字段的分支：当 `fullyIdle !== true` 返回 `undefined`；`model_stop` 映射 `completed`，`error` 和 `max_steps_exceeded` 映射 `failed`，其他原因返回 `interrupted`。以 `conversationId` 和 `executionNum` 生成稳定事件标识。
 
@@ -97,13 +97,13 @@ test("DSH bridge 的 Stop 负载保持 dsh 来源", () => {
 
 创建 `src/agent-preferences.ts`：使用 `JsonPreferencesStore` 读取现有偏好，覆盖一个 `enabledSources[source]` 值后保存；不得重写其余来源或展示设置。该文件同时提供受限 CLI 入口，只接受 `--source codex|antigravity|dsh` 与 `--enabled true|false`；参数无效或保存失败时以非零状态退出，供两个 PowerShell 安装器调用。
 
-- [ ] **Step 4: 运行测试，确认通过**
+- [x] **Step 4: 运行测试，确认通过**
 
 运行：`node --experimental-strip-types --test test/reminder-core.test.ts`
 
 预期：真实 Antigravity、DSH bridge 和偏好变更测试通过，已有映射测试保持通过。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add src/agent-adapters.ts src/agent-preferences.ts test/reminder-core.test.ts
@@ -121,7 +121,7 @@ git commit -m "feat: normalize native agent hook payloads"
 - Consumes: `agent-config.ps1 -Source antigravity -Action install|uninstall [-ConfigPath <path>]`。
 - Produces: 默认的 `~/.gemini/config/hooks.json` 中 `better-codex-task-reminder.Stop` 数组。
 
-- [ ] **Step 1: 写入失败测试**
+- [x] **Step 1: 写入失败测试**
 
 在临时文件预置真实 Antigravity 格式：
 
@@ -141,13 +141,13 @@ assert.deepEqual(installed["user-linter"], original["user-linter"]);
 
 卸载后断言项目顶级键消失、`user-linter` 未变。测试还应在不传 `-ConfigPath` 时用临时 `USERPROFILE` 断言目标为 `.gemini/config/hooks.json`。
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 运行：`node --experimental-strip-types --test --test-name-pattern "Antigravity" test/native-autostart.test.ts`
 
 预期：旧安装器仍写入错误的 `hooks.Stop` 嵌套格式且要求显式配置路径。
 
-- [ ] **Step 3: 实现 Antigravity 专用分支**
+- [x] **Step 3: 实现 Antigravity 专用分支**
 
 将 `agent-config.ps1` 的 `antigravity` 分支改为：
 
@@ -162,13 +162,13 @@ $document.'better-codex-task-reminder' = [PSCustomObject]@{
 
 使用 `Add-Member -Force` 保留未知顶级键；卸载只移除 `better-codex-task-reminder`。将 DSH 从此脚本移除，改由任务 3 的专用安装器负责。`package.json` 分别新增 `agent:antigravity:install`、`agent:antigravity:uninstall`，保留兼容别名并在 README 中标记迁移路径。
 
-- [ ] **Step 4: 运行测试，确认通过**
+- [x] **Step 4: 运行测试，确认通过**
 
 运行：`node --experimental-strip-types --test --test-name-pattern "Antigravity" test/native-autostart.test.ts`
 
 预期：真实 schema、默认路径、自定义路径、未知 Hook 保留和卸载均通过。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add src/native/agent-config.ps1 package.json test/native-autostart.test.ts
@@ -187,7 +187,7 @@ git commit -m "feat: install native Antigravity hooks"
 - Consumes: `install-dsh-bridge.ps1 -Action install|uninstall [-DshHome <path>] [-Profile web] [-DshCliPath <path>]`。
 - Produces: `%APPDATA%/CodexTaskReminder/dsh-hooks.json` 和 DSH profile 中名为 `better-codex-task-reminder-dsh-bridge` 的官方 bundle。
 
-- [ ] **Step 1: 写入失败测试**
+- [x] **Step 1: 写入失败测试**
 
 创建临时 DSH home、临时 `%APPDATA%` 与模拟 CLI `.cmd`。模拟 CLI 将其参数追加进文本文件并在可配置的退出码后退出。安装测试断言：
 
@@ -200,13 +200,13 @@ assert.doesNotMatch(await readFile(settingsPath, "utf8"), /better-codex-task-rem
 
 失败路径令模拟 CLI 返回 1，断言独立 Hook 文件和 bundle 目录均不存在，且 `settings.yaml` 字节不变。卸载测试断言 CLI 收到 `plugin --profile web remove better-codex-task-reminder-dsh-bridge`，但预置的其他 profile bundle 仍在。
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 运行：`node --experimental-strip-types --test --test-name-pattern "DSH bridge" test/native-autostart.test.ts`
 
 预期：专用安装器和 bundle 模板不存在。
 
-- [ ] **Step 3: 实现可回滚 DSH bridge 安装器**
+- [x] **Step 3: 实现可回滚 DSH bridge 安装器**
 
 `install-dsh-bridge.ps1` 使用以下明确路径：
 
@@ -228,13 +228,13 @@ $bundlePath = Join-Path $runtimePath 'dsh-bridge-bundle'
 
 `package.json` 新增 `agent:dsh:install` 与 `agent:dsh:uninstall`，把后续参数透传给此脚本。
 
-- [ ] **Step 4: 运行测试，确认通过**
+- [x] **Step 4: 运行测试，确认通过**
 
 运行：`node --experimental-strip-types --test --test-name-pattern "DSH bridge" test/native-autostart.test.ts`
 
 预期：成功安装、同步 Hook、卸载、第三方 bundle 保留和失败回滚测试通过。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add src/native/install-dsh-bridge.ps1 src/native/dsh-bridge-template package.json test/native-autostart.test.ts
@@ -254,17 +254,17 @@ git commit -m "feat: install DSH notification bridge"
 - Consumes: Task 1 的 `setAgentSourceEnabled`、Task 2/3 安装命令。
 - Produces: 可复制的安装/卸载说明及可复核的最终验证记录。
 
-- [ ] **Step 1: 写入失败测试**
+- [x] **Step 1: 写入失败测试**
 
 增加安装后来源启用测试：运行来源启用入口后断言 Antigravity 或 DSH 变为启用，而 Codex、声音、全屏策略和另一可选来源保持原值。增加读取不存在 DSH runtime 或 profile 时抛出包含目标绝对路径的可操作错误的测试。
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 运行：`node --experimental-strip-types --test test/reminder-core.test.ts test/native-autostart.test.ts`
 
 预期：安装命令尚未调用来源偏好入口，缺少错误契约或文档检查点。
 
-- [ ] **Step 3: 连接安装后启用与文档**
+- [x] **Step 3: 连接安装后启用与文档**
 
 在两个安装器成功完成后，以 Node 类型剥离命令调用来源偏好入口：
 
@@ -283,7 +283,7 @@ npm run agent:dsh:uninstall
 
 说明 DSH 首次安装会通过 `npx` 获取官方 bridge，需网络；不能启动 CLI 时不会更改凭据或 `settings.yaml`。架构文档绘制 Antigravity Hook 与 DSH bridge 汇入同一 `hook-handler.ts` 的事件路径。
 
-- [ ] **Step 4: 运行完整测试与实机检查**
+- [x] **Step 4: 运行完整测试与实机检查**
 
 运行：`npm test`
 
@@ -299,7 +299,7 @@ npx @deepseek-ai/dsh --profile web --dump-config
 
 确认 Antigravity Hook 文件含项目顶级键、DSH dump 含 `@deepseek-ai/dsh-hooks-codex` 和独立 `dsh-hooks.json` 路径。各用合成结束负载调用 `hook-handler.ts --source <source>`，确认各显示一次提醒；关闭后检查无 `reminder-host.ps1` 常驻进程。
 
-- [ ] **Step 5: 更新状态并提交**
+- [x] **Step 5: 更新状态并提交**
 
 将规格状态更新为“已实现并验证”，勾选计划步骤并记录完整测试和实机结果。
 
@@ -307,3 +307,7 @@ npx @deepseek-ai/dsh --profile web --dump-config
 git add README.md docs/architecture.md docs/superpowers/specs/2026-09-19-native-antigravity-dsh-integrations-design.md docs/superpowers/plans/2026-09-19-native-antigravity-dsh-integrations.md test/reminder-core.test.ts test/native-autostart.test.ts
 git commit -m "docs: document native agent integrations"
 ```
+
+## 实施记录
+
+- 2026-09-19：`npm test` 通过 49/49；Antigravity Hook、DSH `web` profile bridge 与两条合成结束事件均已在本机验证。
