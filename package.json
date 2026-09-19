@@ -12,7 +12,9 @@
     "host:install": "powershell -NoProfile -File src/native/install-autostart.ps1",
     "host:uninstall": "powershell -NoProfile -File src/native/uninstall-autostart.ps1",
     "hook:install": "powershell -NoProfile -File src/native/install-session-lifecycle.ps1",
-    "hook:uninstall": "powershell -NoProfile -File src/native/uninstall-autostart.ps1"
+    "hook:uninstall": "powershell -NoProfile -File src/native/uninstall-autostart.ps1",
+    "agent:install": "powershell -NoProfile -File src/native/agent-config.ps1 -Action install",
+    "agent:uninstall": "powershell -NoProfile -File src/native/agent-config.ps1 -Action uninstall"
   },
   "engines": {
     "node": ">=22.6.0"

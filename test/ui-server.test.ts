@@ -78,3 +78,21 @@ test("工作台提供全屏媒体提醒三档设置", async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("工作台提供可选 Agent 来源开关", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-reminder-agent-sources-ui-"));
+  const { createReminderUiServer } = await import("../src/ui/server.js");
+  const app = await createReminderUiServer({ eventLogPath: join(directory, "events.ndjson") });
+  await new Promise((resolveListen) => app.server.listen(0, "127.0.0.1", resolveListen));
+  const address = app.server.address();
+  const port = typeof address === "object" && address ? address.port : 3300;
+  try {
+    const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+    assert.match(html, /data-source="codex"/);
+    assert.match(html, /data-source="antigravity"/);
+    assert.match(html, /data-source="dsh"/);
+  } finally {
+    await new Promise((resolveClose) => app.server.close(resolveClose));
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -109,6 +109,9 @@ async function loadPreferences() {
     document.querySelector(`.segmented-btn[data-mode="${saved.mode}"]`)?.click();
     if (soundToggle) soundToggle.checked = saved.soundEnabled;
     if (workbenchServiceToggle) workbenchServiceToggle.checked = saved.workbenchServiceEnabled;
+    document.querySelectorAll("input[data-source]").forEach((input) => {
+      input.checked = saved.enabledSources?.[input.dataset.source] ?? input.dataset.source === "codex";
+    });
     updateFullscreenMode(saved.fullscreenReminderMode);
     soundEngine.setEnabled(saved.soundEnabled);
   } catch {
@@ -301,6 +304,15 @@ if (workbenchServiceToggle) {
     savePreferences().catch(() => showFeedbackToast("提醒设置保存失败"));
   });
 }
+
+document.querySelectorAll("input[data-source]").forEach((input) => {
+  input.addEventListener("change", () => {
+    const source = input.dataset.source;
+    if (!source || source === "codex") return;
+    preferences.enabledSources = { ...(preferences.enabledSources || { codex: true, antigravity: false, dsh: false }), [source]: input.checked };
+    savePreferences().catch(() => showFeedbackToast("来源设置保存失败"));
+  });
+});
 
 const fullscreenModeButtons = document.querySelectorAll(".segmented-btn[data-fullscreen-mode]");
 

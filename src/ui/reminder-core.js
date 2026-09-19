@@ -11,6 +11,8 @@ export const TASK_STATUSES = [
   "interrupted",
 ];
 
+export const AGENT_SOURCES = ["codex", "antigravity", "dsh"];
+
 const SPECIAL_STATUSES = [
   "needs_input",
   "needs_authorization",
@@ -22,6 +24,7 @@ export const DEFAULT_PREFERENCES = {
   mode: "light",
   soundEnabled: true,
   fullscreenReminderMode: "normal",
+  enabledSources: { codex: true, antigravity: false, dsh: false },
 };
 
 function visualToneFor(status) {
@@ -76,11 +79,17 @@ export function validateTaskEvent(value) {
     throw new Error("任务事件的 summary 必须是字符串。");
   }
 
+  const source = value.source === undefined ? "codex" : requireText(value.source, "source");
+  if (!AGENT_SOURCES.includes(source)) {
+    throw new Error(`不支持的任务来源：${source}。`);
+  }
+
   return {
     taskId,
     title,
     occurredAt: occurredDate.toISOString(),
     status,
+    source,
     ...(value.summary?.trim() ? { summary: value.summary.trim() } : {}),
   };
 }
@@ -141,6 +150,9 @@ export class ReminderService {
 
   receive(rawEvent, runtime = { isFullScreen: false }) {
     const event = validateTaskEvent(rawEvent);
+    if (this.preferences.enabledSources?.[event.source] === false) {
+      return { kind: "suppressed", reason: "source-disabled" };
+    }
     const decision = decideReminder(event, this.preferences, runtime, this.createReminderId);
 
     if (decision.kind === "display") {

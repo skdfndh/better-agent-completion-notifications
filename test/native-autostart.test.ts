@@ -19,6 +19,7 @@ const hiddenLauncherScript = join(projectPath, "src", "native", "reminder-hidden
 const sessionStartScript = join(projectPath, "src", "native", "reminder-session-start.ps1");
 const sessionLifecycleInstallerScript = join(projectPath, "src", "native", "install-session-lifecycle.ps1");
 const uninstallAutostartScript = join(projectPath, "src", "native", "uninstall-autostart.ps1");
+const agentConfigScript = join(projectPath, "src", "native", "agent-config.ps1");
 
 function toPowerShellLiteral(value: string) {
   return value.replaceAll("'", "''");
@@ -361,6 +362,32 @@ test("Codex Hook 安装迁移仅替换项目条目", async () => {
     assert.match(uninstalled, /user-owned-command/);
     assert.match(uninstalled, /user-owned-session-start/);
     assert.doesNotMatch(uninstalled, /hook-handler\.ts/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("可选 Agent 安装器只修改项目自己的 Hook", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-agent-config-"));
+  const configPath = join(directory, "agent-hooks.json");
+  const escapedAgentConfigScript = toPowerShellLiteral(agentConfigScript);
+  const escapedConfigPath = toPowerShellLiteral(configPath);
+  await writeFile(configPath, JSON.stringify({
+    hooks: {
+      Stop: [{ hooks: [{ type: "command", command: "user-owned-command" }] }],
+    },
+  }), "utf8");
+
+  try {
+    await runPowerShell(`& '${escapedAgentConfigScript}' -Source antigravity -Action install -ConfigPath '${escapedConfigPath}'`);
+    const installed = await readFile(configPath, "utf8");
+    assert.match(installed, /user-owned-command/);
+    assert.match(installed, /hook-handler\.ts.*--source antigravity/);
+
+    await runPowerShell(`& '${escapedAgentConfigScript}' -Source antigravity -Action uninstall -ConfigPath '${escapedConfigPath}'`);
+    const uninstalled = await readFile(configPath, "utf8");
+    assert.match(uninstalled, /user-owned-command/);
+    assert.doesNotMatch(uninstalled, /hook-handler\.ts.*--source antigravity/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
