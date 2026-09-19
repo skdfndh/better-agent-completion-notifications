@@ -2,6 +2,20 @@
   "name": "codex-task-reminder",
   "private": true,
   "version": "0.1.0",
+  "description": "面向 Codex、Antigravity 与 DSH 的 Windows 原生任务完成提醒。",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/skdfndh/better-codex-completion-notifications.git"
+  },
+  "keywords": [
+    "codex",
+    "antigravity",
+    "dsh",
+    "windows",
+    "notification",
+    "agent"
+  ],
   "type": "module",
   "scripts": {
     "demo": "node --experimental-strip-types src/cli.ts",
