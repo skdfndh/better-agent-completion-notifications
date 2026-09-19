@@ -23,8 +23,8 @@
 ## 五分钟开始使用
 
 ```powershell
-git clone https://github.com/skdfndh/better-codex-completion-notifications.git
-cd better-codex-completion-notifications
+git clone https://github.com/skdfndh/better-agent-completion-notifications.git
+cd better-agent-completion-notifications
 npm test
 npm run hook:install
 npm run ui
