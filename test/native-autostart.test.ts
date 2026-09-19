@@ -373,42 +373,50 @@ test("Codex Hook 安装迁移仅替换项目条目", async () => {
   }
 });
 
-test("可选 Agent 安装器只修改项目自己的 Hook", async () => {
+test("Antigravity 安装器只修改项目自己的顶级 Hook", async () => {
   const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-agent-config-"));
   const configPath = join(directory, "agent-hooks.json");
   const escapedAgentConfigScript = toPowerShellLiteral(agentConfigScript);
   const escapedConfigPath = toPowerShellLiteral(configPath);
   await writeFile(configPath, JSON.stringify({
-    hooks: {
-      Stop: [
-        { hooks: [{ type: "command", command: "user-owned-command" }] },
-        { hooks: [{ type: "command", command: "node C:\\Other\\src\\hook-handler.ts --source antigravity" }] },
-      ],
+    "user-linter": {
+      Stop: [{ type: "command", command: "user-owned-command" }],
     },
   }), "utf8");
 
   try {
     await runPowerShell(`& '${escapedAgentConfigScript}' -Source antigravity -Action install -ConfigPath '${escapedConfigPath}'`);
-    const installed = await readFile(configPath, "utf8");
-    assert.match(installed, /user-owned-command/);
-    const installedAgentCommands = JSON.parse(installed).hooks.Stop.flatMap((group: { hooks: { command: string }[] }) => group.hooks.map((hook) => hook.command));
-    assert.ok(installedAgentCommands.includes("node C:\\Other\\src\\hook-handler.ts --source antigravity"));
-    assert.match(installed, /hook-handler\.ts.*--source antigravity/);
+    const installed = JSON.parse(await readFile(configPath, "utf8"));
+    assert.match(installed["better-codex-task-reminder"].Stop[0].command, /hook-handler\.ts.*--source antigravity/);
+    assert.equal(installed["better-codex-task-reminder"].Stop[0].timeout, 5);
+    assert.deepEqual(installed["user-linter"], {
+      Stop: [{ type: "command", command: "user-owned-command" }],
+    });
 
     await runPowerShell(`& '${escapedAgentConfigScript}' -Source antigravity -Action uninstall -ConfigPath '${escapedConfigPath}'`);
-    const uninstalled = await readFile(configPath, "utf8");
-    assert.match(uninstalled, /user-owned-command/);
-    const remainingAgentCommands = JSON.parse(uninstalled).hooks.Stop.flatMap((group: { hooks: { command: string }[] }) => group.hooks.map((hook) => hook.command));
-    assert.ok(remainingAgentCommands.includes("node C:\\Other\\src\\hook-handler.ts --source antigravity"));
-    assert.equal(JSON.parse(uninstalled).hooks.Stop.length, 2);
+    const uninstalled = JSON.parse(await readFile(configPath, "utf8"));
+    assert.equal(uninstalled["better-codex-task-reminder"], undefined);
+    assert.deepEqual(uninstalled["user-linter"], {
+      Stop: [{ type: "command", command: "user-owned-command" }],
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
-    await runPowerShell(`& '${escapedAgentConfigScript}' -Source dsh -Action install -ConfigPath '${escapedConfigPath}'`);
-    const dshInstalled = JSON.parse(await readFile(configPath, "utf8"));
-    assert.match(dshInstalled.hooks["turn/end"][0].hooks[0].command, /hook-handler\.ts.*--source dsh/);
+test("Antigravity 安装器默认写入用户 Gemini Hook 文件", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-agent-home-"));
+  const configPath = join(directory, ".gemini", "config", "hooks.json");
+  const escapedAgentConfigScript = toPowerShellLiteral(agentConfigScript);
+  const escapedDirectory = toPowerShellLiteral(directory);
 
-    await runPowerShell(`& '${escapedAgentConfigScript}' -Source dsh -Action uninstall -ConfigPath '${escapedConfigPath}'`);
-    const dshUninstalled = JSON.parse(await readFile(configPath, "utf8"));
-    assert.equal(dshUninstalled.hooks["turn/end"], undefined);
+  try {
+    await runPowerShell(`
+      $env:USERPROFILE = '${escapedDirectory}'
+      & '${escapedAgentConfigScript}' -Source antigravity -Action install
+    `);
+    const installed = JSON.parse(await readFile(configPath, "utf8"));
+    assert.match(installed["better-codex-task-reminder"].Stop[0].command, /hook-handler\.ts.*--source antigravity/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
