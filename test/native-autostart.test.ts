@@ -14,6 +14,7 @@ const supervisorScript = join(projectPath, "src", "native", "reminder-supervisor
 const watchdogScript = join(projectPath, "src", "native", "reminder-watchdog.ps1");
 const hostLauncherScript = join(projectPath, "src", "native", "reminder-host-launcher.ps1");
 const desktopHostSupervisorScript = join(projectPath, "src", "native", "reminder-desktop-host-supervisor.ps1");
+const hiddenLauncherScript = join(projectPath, "src", "native", "reminder-hidden-launcher.vbs");
 
 function toPowerShellLiteral(value: string) {
   return value.replaceAll("'", "''");
@@ -51,6 +52,7 @@ test("安装脚本创建可重启的登录守护任务", async () => {
         recoveryInterval = if ($recoveryTrigger) { [string]$recoveryTrigger.Repetition.Interval } else { $null }
         restartCount = [int]$task.Settings.RestartCount
         restartInterval = [string]$task.Settings.RestartInterval
+        execute = [string]$task.Actions[0].Execute
         arguments = [string]$task.Actions[0].Arguments
       } | ConvertTo-Json -Compress -Depth 10
     `);
@@ -61,6 +63,8 @@ test("安装脚本创建可重启的登录守护任务", async () => {
     assert.equal(task.recoveryInterval, "PT1M");
     assert.equal(task.restartCount, 3);
     assert.equal(task.restartInterval, "PT1M");
+    assert.match(task.execute, /wscript\.exe$/i);
+    assert.match(task.arguments, /reminder-hidden-launcher\.vbs/);
     assert.match(task.arguments, /reminder-supervisor\.ps1/);
     assert.match(task.arguments, /-DisableNativeHost/);
   } finally {
@@ -246,6 +250,26 @@ test("桌面会话监督器会启动原生提醒宿主", async () => {
     assert.notEqual(Number((await readFile(markerPath, "utf8")).trim()), supervisor.pid);
   } finally {
     supervisor.kill();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("无窗口启动器会在后台运行 PowerShell 脚本", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-hidden-launcher-"));
+  const workerScript = join(directory, "test-worker.ps1");
+  const markerPath = join(directory, "started.txt");
+  await writeFile(workerScript, "Set-Content -LiteralPath '" + markerPath.replaceAll("'", "''") + "' -Value 'started'\n", "utf8");
+
+  try {
+    await execFileAsync("wscript.exe", [hiddenLauncherScript, "-File", workerScript], { windowsHide: true });
+    await waitFor(async () => {
+      try {
+        return (await readFile(markerPath, "utf8")).trim() === "started";
+      } catch {
+        return false;
+      }
+    }, 5_000);
+  } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });
