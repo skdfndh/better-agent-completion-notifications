@@ -45,11 +45,15 @@ if ($hookDocument.hooks.SessionStart) {
 }
 
 foreach ($eventName in @('Stop', 'PermissionRequest', 'Interrupt')) {
-  $existing = if ($hookDocument.hooks.$eventName) { Remove-ProjectGroups @($hookDocument.hooks.$eventName) } else { @() }
+  $existing = @()
+  if ($hookDocument.hooks.$eventName) {
+    $existing += @(Remove-ProjectGroups @($hookDocument.hooks.$eventName))
+  }
   $command = "node --experimental-strip-types `"$hookHandlerScript`" --source codex"
   $handler = [PSCustomObject]@{ type = 'command'; command = $command; commandWindows = $command; async = $true; timeout = 5; statusMessage = 'Dispatching Codex reminder' }
   $group = [PSCustomObject]@{ hooks = @($handler) }
-  $hookDocument.hooks | Add-Member -Force -NotePropertyName $eventName -NotePropertyValue @($existing + $group)
+  $existing += $group
+  $hookDocument.hooks | Add-Member -Force -NotePropertyName $eventName -NotePropertyValue @($existing)
 }
 
 $directory = Split-Path -Parent $HooksPath
