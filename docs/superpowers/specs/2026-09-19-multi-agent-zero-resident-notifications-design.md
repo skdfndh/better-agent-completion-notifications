@@ -1,7 +1,7 @@
 # 多 Agent 零常驻通知设计
 
 日期：2026-09-19  
-状态：待用户审阅
+状态：已实现并验证
 
 ## 背景与问题
 
@@ -41,7 +41,7 @@ Agent 生命周期钩子
 
 ## 规范化事件
 
-在现有 `TaskEvent` 基础上增加可选来源字段，保持旧事件兼容：
+在现有 `TaskEvent` 基础上增加来源字段，保持旧事件兼容：
 
 ```ts
 type AgentSource = "codex" | "antigravity" | "dsh";
@@ -64,7 +64,7 @@ interface AgentEvent extends TaskEvent {
 
 - 保留现有 `Stop`、`PermissionRequest`、`Interrupt` 的命令钩子。
 - `hook-handler.ts` 从 Codex 标准输入规范化事件后，调用统一通知启动器，而不是仅追加日志等待常驻宿主读取。
-- `SessionStart` 不再负责启动提醒宿主；它可以保留为工作台后台服务的独立入口，或在迁移完成后移除。
+- `SessionStart` 不再负责启动提醒宿主；迁移时仅移除本项目旧入口，保留用户自己的 SessionStart Hook。
 
 ### Antigravity
 

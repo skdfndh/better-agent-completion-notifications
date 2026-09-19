@@ -58,7 +58,7 @@
 - Consumes: 现有 `TaskEvent`、Codex Hook 负载、`JsonPreferencesStore`。
 - Produces: `AgentSource`、`EnabledSources`、带 `source` 和 `eventId` 的 `TaskEvent`、`mapAgentHookEvent(source, payload, occurredAt)`。
 
-- [ ] **Step 1: 写入失败测试**
+- [x] **Step 1: 写入失败测试**
 
 ```ts
 test("旧事件和旧偏好回退到 Codex", async () => {
@@ -79,13 +79,13 @@ test("各 Agent 映射状态和稳定事件标识", () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 运行：`node --experimental-strip-types --test test/reminder-core.test.ts`
 
 预期：因新来源类型、事件标识与映射器不存在而失败。
 
-- [ ] **Step 3: 实现最小模型和映射**
+- [x] **Step 3: 实现最小模型和映射**
 
 在 `src/types.ts` 增加：
 
@@ -99,13 +99,13 @@ export type EnabledSources = Record<AgentSource, boolean>;
 
 `src/agent-adapters.ts` 只读取已知字段：Codex 和 Antigravity 使用 `hook_event_name`、`session_id`、`turn_id`；DSH 使用 `event`、`turn.id`、`session.id`、`reason`。未知事件、缺少标识、未知 DSH 原因一律返回 `undefined`，不从文本推断状态。
 
-- [ ] **Step 4: 运行测试，确认通过**
+- [x] **Step 4: 运行测试，确认通过**
 
 运行：`node --experimental-strip-types --test test/reminder-core.test.ts`
 
 预期：新增兼容、来源和映射测试通过，原有策略测试保持通过。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add src/types.ts src/events.ts src/codex-hooks.ts src/agent-adapters.ts src/preferences.ts test/reminder-core.test.ts
@@ -124,7 +124,7 @@ git commit -m "feat: normalize multi-agent task events"
 - Consumes: `TaskEvent`、`JsonPreferencesStore`、`appendTaskEvent`、隐藏启动器路径。
 - Produces: `dispatchTaskEvent(event, options): Promise<DispatchResult>`，其中结果为 `launched`、`suppressed-source` 或 `duplicate`。
 
-- [ ] **Step 1: 写入失败测试**
+- [x] **Step 1: 写入失败测试**
 
 ```ts
 test("首次事件写审计日志、创建一次性文件且不泄漏正文到参数", async () => {
@@ -147,13 +147,13 @@ test("并发重复事件只取得一个声明", async () => {
 
 同时覆盖：禁用来源时不启动；启动器报错时删除声明；10 分钟前的声明在下次分发前清理。
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 运行：`node --experimental-strip-types --test test/event-dispatcher.test.ts`
 
 预期：因分发器模块不存在而失败。
 
-- [ ] **Step 3: 实现分发器和 Hook 入口**
+- [x] **Step 3: 实现分发器和 Hook 入口**
 
 在 `%APPDATA%\CodexTaskReminder\pending` 写入一次性事件 JSON。在 `dedupe` 目录以 `sha256(source + "\0" + eventId)` 命名文件，通过 `open(path, "wx")` 原子取得声明；声明记录时间，清除超过十分钟的文件。
 
@@ -169,13 +169,13 @@ export async function dispatchTaskEvent(
 
 `hook-handler.ts` 解析 `--source <codex|antigravity|dsh>`，调用 `mapAgentHookEvent` 和分发器。无效负载无副作用；有效事件启动失败时输出只含来源与事件标识的错误并以非零状态结束。
 
-- [ ] **Step 4: 运行测试，确认通过**
+- [x] **Step 4: 运行测试，确认通过**
 
 运行：`node --experimental-strip-types --test test/event-dispatcher.test.ts`
 
 预期：审计、去重、脱敏、开关和失败回滚测试通过。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add src/event-log.ts src/event-dispatcher.ts src/hook-handler.ts test/event-dispatcher.test.ts
@@ -193,7 +193,7 @@ git commit -m "feat: dispatch one-shot native reminders"
 - Consumes: `reminder-host.ps1 -EventPath <absolute-json-path>`。
 - Produces: 读取一个有效事件、遵守偏好展示或播放声音、关闭即退出并清理事件文件的 WPF 进程。
 
-- [ ] **Step 1: 写入失败测试**
+- [x] **Step 1: 写入失败测试**
 
 ```ts
 test("一次性展示器在不展示时清理事件文件", async () => {
@@ -209,13 +209,13 @@ test("一次性展示器在不展示时清理事件文件", async () => {
 
 另外断言：无效 JSON 或缺失 `-EventPath` 时退出码非零；VBS 启动器只逐项引用调用参数，不读取事件内容。
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 运行：`node --experimental-strip-types --test test/native-autostart.test.ts`
 
 预期：`-EventPath` 与 `-TestNoWindow` 尚不受支持而失败。
 
-- [ ] **Step 3: 实现一次性分支**
+- [x] **Step 3: 实现一次性分支**
 
 在 `reminder-host.ps1` 参数中增加：
 
@@ -226,13 +226,13 @@ test("一次性展示器在不展示时清理事件文件", async () => {
 
 新增 `Read-EventFile`：UTF-8 读取并验证 `taskId`、`eventId`、`source`、`status`、`title`、`occurredAt`；读取成功后删除文件。失败时仅记录来源和文件名后退出 1。让 `Show-ReminderWindow` 返回窗口；在 `EventPath` 模式给 `Closed` 注册 `Dispatcher.BeginInvokeShutdown`。隐藏、全屏关闭、仅声音策略完成后立即退出。没有 `EventPath` 时保留 `npm run host` 调试监听模式，但安装器与 Hook 不得启动它。
 
-- [ ] **Step 4: 运行测试，确认通过**
+- [x] **Step 4: 运行测试，确认通过**
 
 运行：`node --experimental-strip-types --test test/native-autostart.test.ts`
 
 预期：成功、无效文件、抑制清理和参数脱敏测试通过；不再符合架构的旧常驻监督器测试在同一提交中替换为一次性行为测试。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add src/native/reminder-host.ps1 src/native/reminder-hidden-launcher.vbs test/native-autostart.test.ts
@@ -253,7 +253,7 @@ git commit -m "feat: exit native reminder after one event"
 - Consumes: 用户级 `~/.codex/hooks.json` 和项目绝对路径。
 - Produces: `npm run hook:install`、`npm run hook:uninstall`；`Stop`、`PermissionRequest`、`Interrupt` 调用 `hook-handler.ts --source codex`，不存在项目 `SessionStart` 宿主 Hook。
 
-- [ ] **Step 1: 写入失败测试**
+- [x] **Step 1: 写入失败测试**
 
 在临时 `hooks.json` 预置用户拥有的 `Stop` 和 `SessionStart` 条目，运行安装器后断言：
 
@@ -265,13 +265,13 @@ assert.equal(findProjectHook(hooks, "SessionStart"), undefined);
 
 运行卸载器后断言未知条目仍在、项目条目消失；进程查询不再匹配 `reminder-desktop-host-supervisor.ps1`、`reminder-session-start.ps1` 或无事件参数的 `reminder-host.ps1`。
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 运行：`node --experimental-strip-types --test test/native-autostart.test.ts`
 
 预期：安装器仍写入 `SessionStart`，测试失败。
 
-- [ ] **Step 3: 实现可逆迁移**
+- [x] **Step 3: 实现可逆迁移**
 
 按项目绝对路径删除旧 `reminder-session-start.ps1`、旧 `hook-handler.ts` 条目，再添加三个项目拥有的 Codex 事件 Hook，其他条目原样保留。使用 UTF-8 无 BOM 写配置。卸载脚本继续清理旧任务、快捷方式与旧进程。`package.json` 新增：
 
@@ -280,13 +280,13 @@ assert.equal(findProjectHook(hooks, "SessionStart"), undefined);
 "hook:uninstall": "powershell -NoProfile -File src/native/uninstall-autostart.ps1"
 ```
 
-- [ ] **Step 4: 运行测试，确认通过**
+- [x] **Step 4: 运行测试，确认通过**
 
 运行：`node --experimental-strip-types --test test/native-autostart.test.ts`
 
 预期：仅项目 Hook 被迁移，遗留常驻链路被停止和移除。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add src/native/install-session-lifecycle.ps1 src/native/uninstall-autostart.ps1 src/native/reminder-session-start.ps1 src/native/reminder-desktop-host-supervisor.ps1 package.json test/native-autostart.test.ts
@@ -307,9 +307,9 @@ git commit -m "fix: replace Codex resident host with event hooks"
 
 **Interfaces:**
 - Consumes: `agent-config.ps1 -Source <antigravity|dsh> -Action <install|uninstall> -ConfigPath <path>` 与偏好 `enabledSources`。
-- Produces: `npm run agent:install -- --source antigravity`、`npm run agent:uninstall -- --source dsh` 和来源复选框。
+- Produces: `npm run agent:install -- -Source antigravity -ConfigPath <path>`、`npm run agent:uninstall -- -Source dsh -ConfigPath <path>` 和来源复选框。
 
-- [ ] **Step 1: 写入失败测试**
+- [x] **Step 1: 写入失败测试**
 
 ```ts
 test("可选 Agent 安装器只修改项目自己的 Hook", async () => {
@@ -322,25 +322,25 @@ test("可选 Agent 安装器只修改项目自己的 Hook", async () => {
 
 在 `test/ui-server.test.ts` 断言 HTML 含 `data-source="codex"`、`data-source="antigravity"`、`data-source="dsh"`，并断言禁用来源不会进入浏览器预览服务。
 
-- [ ] **Step 2: 运行测试，确认失败**
+- [x] **Step 2: 运行测试，确认失败**
 
 运行：`node --experimental-strip-types --test test/native-autostart.test.ts test/ui-server.test.ts`
 
 预期：适配器安装器与来源控件尚不存在而失败。
 
-- [ ] **Step 3: 实现可选配置和 UI**
+- [x] **Step 3: 实现可选配置和 UI**
 
 `agent-config.ps1` 仅在用户显式运行时解析默认配置路径；Antigravity 写入 `Stop` 命令 Hook，DSH 写入 `turn/end` 命令订阅，命令均为 `node --experimental-strip-types <project>\src\hook-handler.ts --source <source>`。安装前删除相同项目路径条目，卸载也只删除该条目。
 
 工作台设置区加入三个来源复选框：Codex 固定开启、Antigravity 与 DSH 默认关闭。保存时更新 `preferences.enabledSources`；浏览器核心预览前检查来源开关。`package.json` 新增 `agent:install` 和 `agent:uninstall`，透传参数给 PowerShell 脚本。
 
-- [ ] **Step 4: 运行测试，确认通过**
+- [x] **Step 4: 运行测试，确认通过**
 
 运行：`node --experimental-strip-types --test test/native-autostart.test.ts test/ui-server.test.ts`
 
 预期：配置可逆、未知条目保留、来源开关和旧偏好均通过。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add src/native/agent-config.ps1 src/ui/index.html src/ui/app.js src/ui/reminder-core.js src/preferences.ts package.json test/native-autostart.test.ts test/ui-server.test.ts
@@ -359,28 +359,28 @@ git commit -m "feat: add optional Antigravity and DSH adapters"
 - Consumes: 已完成的 Hook、安装脚本、工作台设置与事件分发器。
 - Produces: 不依赖常驻宿主的用户说明、实际验证记录。
 
-- [ ] **Step 1: 写入文档检查点**
+- [x] **Step 1: 写入文档检查点**
 
 README 必须包含：
 
 ```text
 每个任务事件会启动一次桌面提醒；提醒关闭后不保留本项目的提醒进程。
 npm run hook:install
-npm run agent:install -- --source antigravity
-npm run agent:install -- --source dsh
+npm run agent:install -- -Source antigravity -ConfigPath <path>
+npm run agent:install -- -Source dsh -ConfigPath <path>
 ```
 
 架构图替换为“适配器 -> 分发器 -> 一次性展示器”，说明审计日志不是运行时消息队列。
 
-- [ ] **Step 2: 运行完整测试**
+- [x] **Step 2: 运行完整测试**
 
 运行：`npm test`
 
 预期：全部测试通过，临时目录、测试进程和配置均被清理。
 
-- [ ] **Step 3: 执行实际单次提醒检查**
+- [x] **Step 3: 执行实际单次提醒检查**
 
-运行 `npm run hook:install`，再用合成 Codex `Stop` JSON 调用 `npm run hook -- --source codex`。确认提醒出现一次并关闭；随后运行：
+运行 `npm run hook:install`，再用合成 Codex `Stop` JSON 调用 `npm run hook -- -- --source codex`。确认提醒出现一次并关闭；随后运行：
 
 ```powershell
 Get-CimInstance Win32_Process | Where-Object {
@@ -390,7 +390,7 @@ Get-CimInstance Win32_Process | Where-Object {
 
 预期：关闭后无匹配进程。运行 `npm run hook:uninstall`，确认仅项目 Hook 被移除；未获得用户显式选择时，不安装 Antigravity 或 DSH。
 
-- [ ] **Step 4: 更新状态并提交**
+- [x] **Step 4: 更新状态并提交**
 
 将设计状态改为“已实现并验证”，勾选计划中的完成步骤，记录实际测试与运行时结果。
 
