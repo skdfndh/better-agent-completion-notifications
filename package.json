@@ -16,7 +16,9 @@
     "agent:install": "npm run agent:antigravity:install",
     "agent:uninstall": "npm run agent:antigravity:uninstall",
     "agent:antigravity:install": "powershell -NoProfile -File src/native/agent-config.ps1 -Source antigravity -Action install",
-    "agent:antigravity:uninstall": "powershell -NoProfile -File src/native/agent-config.ps1 -Source antigravity -Action uninstall"
+    "agent:antigravity:uninstall": "powershell -NoProfile -File src/native/agent-config.ps1 -Source antigravity -Action uninstall",
+    "agent:dsh:install": "powershell -NoProfile -File src/native/install-dsh-bridge.ps1 -Action install",
+    "agent:dsh:uninstall": "powershell -NoProfile -File src/native/install-dsh-bridge.ps1 -Action uninstall"
   },
   "engines": {
     "node": ">=22.6.0"

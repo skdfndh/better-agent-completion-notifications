@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -20,6 +20,7 @@ const sessionStartScript = join(projectPath, "src", "native", "reminder-session-
 const sessionLifecycleInstallerScript = join(projectPath, "src", "native", "install-session-lifecycle.ps1");
 const uninstallAutostartScript = join(projectPath, "src", "native", "uninstall-autostart.ps1");
 const agentConfigScript = join(projectPath, "src", "native", "agent-config.ps1");
+const dshBridgeInstallerScript = join(projectPath, "src", "native", "install-dsh-bridge.ps1");
 
 function toPowerShellLiteral(value: string) {
   return value.replaceAll("'", "''");
@@ -417,6 +418,93 @@ test("Antigravity 安装器默认写入用户 Gemini Hook 文件", async () => {
     `);
     const installed = JSON.parse(await readFile(configPath, "utf8"));
     assert.match(installed["better-codex-task-reminder"].Stop[0].command, /hook-handler\.ts.*--source antigravity/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("DSH bridge 安装器使用独立同步 Hook 且卸载不影响其他 bundle", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-dsh-bridge-"));
+  const dshHome = join(directory, "dsh");
+  const profilePath = join(dshHome, "profiles", "web");
+  const appDataPath = join(directory, "appdata");
+  const settingsPath = join(dshHome, "settings.yaml");
+  const fakeCliPath = join(directory, "fake-dsh.cmd");
+  const fakeCliLogPath = join(directory, "fake-dsh.log");
+  const escapedInstaller = toPowerShellLiteral(dshBridgeInstallerScript);
+  const escapedDshHome = toPowerShellLiteral(dshHome);
+  const escapedAppData = toPowerShellLiteral(appDataPath);
+  const escapedCli = toPowerShellLiteral(fakeCliPath);
+  const escapedLog = toPowerShellLiteral(fakeCliLogPath);
+  const settings = "ui-onboarding:\n  welcomeNoticeVersion: 2026-08-13.1\n";
+  await mkdir(profilePath, { recursive: true });
+  await writeFile(join(profilePath, "package.json"), JSON.stringify({
+    name: "dsh-profile-web",
+    dependencies: { "other-bundle": "file:./other-bundle" },
+  }), "utf8");
+  await writeFile(settingsPath, settings, "utf8");
+  await writeFile(fakeCliPath, `@echo off\r\necho %*>>"${escapedLog}"\r\nexit /b 0\r\n`, "utf8");
+
+  try {
+    await runPowerShell(`
+      $env:APPDATA = '${escapedAppData}'
+      & '${escapedInstaller}' -Action install -DshHome '${escapedDshHome}' -Profile web -DshCliPath '${escapedCli}'
+    `);
+    const dshHooksPath = join(appDataPath, "CodexTaskReminder", "dsh-hooks.json");
+    const bundlePath = join(appDataPath, "CodexTaskReminder", "dsh-bridge-bundle");
+    const dshHooks = JSON.parse(await readFile(dshHooksPath, "utf8"));
+    assert.equal(dshHooks.hooks.Stop[0].hooks[0].async, undefined);
+    assert.match(dshHooks.hooks.Stop[0].hooks[0].command, /hook-handler\.ts.*--source dsh/);
+    assert.match(await readFile(fakeCliLogPath, "utf8"), /@deepseek-ai\/dsh plugin --profile web add/);
+    assert.match(await readFile(join(bundlePath, "cordis.patch.yml"), "utf8"), /@deepseek-ai\/dsh-hooks-codex/);
+    assert.equal(await readFile(settingsPath, "utf8"), settings);
+
+    await writeFile(join(profilePath, "package.json"), JSON.stringify({
+      name: "dsh-profile-web",
+      dependencies: {
+        "other-bundle": "file:./other-bundle",
+        "better-codex-task-reminder-dsh-bridge": `file:${bundlePath}`,
+      },
+    }), "utf8");
+    await runPowerShell(`
+      $env:APPDATA = '${escapedAppData}'
+      & '${escapedInstaller}' -Action uninstall -DshHome '${escapedDshHome}' -Profile web -DshCliPath '${escapedCli}'
+    `);
+    assert.match(await readFile(fakeCliLogPath, "utf8"), /@deepseek-ai\/dsh plugin --profile web remove better-codex-task-reminder-dsh-bridge/);
+    assert.equal(JSON.parse(await readFile(join(profilePath, "package.json"), "utf8")).dependencies["other-bundle"], "file:./other-bundle");
+    await assert.rejects(() => readFile(dshHooksPath, "utf8"));
+    await assert.rejects(() => stat(bundlePath));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("DSH bridge CLI 失败时回滚独立运行时文件", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-dsh-bridge-failed-"));
+  const dshHome = join(directory, "dsh");
+  const profilePath = join(dshHome, "profiles", "web");
+  const appDataPath = join(directory, "appdata");
+  const settingsPath = join(dshHome, "settings.yaml");
+  const fakeCliPath = join(directory, "failed-dsh.cmd");
+  const escapedInstaller = toPowerShellLiteral(dshBridgeInstallerScript);
+  const escapedDshHome = toPowerShellLiteral(dshHome);
+  const escapedAppData = toPowerShellLiteral(appDataPath);
+  const escapedCli = toPowerShellLiteral(fakeCliPath);
+  const settings = "agent-default-model:\n  provider: deepseek-official\n";
+  await mkdir(profilePath, { recursive: true });
+  await writeFile(join(profilePath, "package.json"), JSON.stringify({ name: "dsh-profile-web" }), "utf8");
+  await writeFile(settingsPath, settings, "utf8");
+  await writeFile(fakeCliPath, "@echo off\r\nexit /b 1\r\n", "utf8");
+
+  try {
+    await assert.rejects(() => runPowerShell(`
+      $env:APPDATA = '${escapedAppData}'
+      & '${escapedInstaller}' -Action install -DshHome '${escapedDshHome}' -Profile web -DshCliPath '${escapedCli}'
+    `));
+    const runtimePath = join(appDataPath, "CodexTaskReminder");
+    await assert.rejects(() => stat(join(runtimePath, "dsh-hooks.json")));
+    await assert.rejects(() => stat(join(runtimePath, "dsh-bridge-bundle")));
+    assert.equal(await readFile(settingsPath, "utf8"), settings);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
