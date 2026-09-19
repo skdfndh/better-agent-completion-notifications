@@ -12,6 +12,7 @@ const projectPath = process.cwd();
 const installScript = join(projectPath, "src", "native", "install-autostart.ps1");
 const supervisorScript = join(projectPath, "src", "native", "reminder-supervisor.ps1");
 const watchdogScript = join(projectPath, "src", "native", "reminder-watchdog.ps1");
+const reminderHostScript = join(projectPath, "src", "native", "reminder-host.ps1");
 const hostLauncherScript = join(projectPath, "src", "native", "reminder-host-launcher.ps1");
 const desktopHostSupervisorScript = join(projectPath, "src", "native", "reminder-desktop-host-supervisor.ps1");
 const hiddenLauncherScript = join(projectPath, "src", "native", "reminder-hidden-launcher.vbs");
@@ -345,6 +346,54 @@ test("无窗口启动器会在后台运行 PowerShell 脚本", async () => {
         return false;
       }
     }, 5_000);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("一次性展示器在不展示时清理事件文件", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-single-event-"));
+  const eventPath = join(directory, "event.json");
+  const escapedDirectory = toPowerShellLiteral(directory);
+  const escapedEventPath = toPowerShellLiteral(eventPath);
+  const escapedHostScript = toPowerShellLiteral(reminderHostScript);
+  await writeFile(eventPath, JSON.stringify({
+    taskId: "task-1",
+    eventId: "event-1",
+    source: "codex",
+    status: "completed",
+    title: "测试提醒",
+    occurredAt: "2026-09-19T00:00:00.000Z",
+  }), "utf8");
+
+  try {
+    const { stdout } = await runPowerShell(`
+      $env:APPDATA = '${escapedDirectory}'
+      $env:TEST_REMINDER_HOST_NO_RUN = '1'
+      & '${escapedHostScript}' -EventPath '${escapedEventPath}' -TestNoWindow
+      Test-Path -LiteralPath '${escapedEventPath}'
+    `);
+    assert.equal(stdout.trim(), "False");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("一次性展示器拒绝无效事件文件", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-invalid-event-"));
+  const eventPath = join(directory, "invalid.json");
+  const escapedDirectory = toPowerShellLiteral(directory);
+  const escapedEventPath = toPowerShellLiteral(eventPath);
+  const escapedHostScript = toPowerShellLiteral(reminderHostScript);
+  await writeFile(eventPath, "not-json", "utf8");
+
+  try {
+    await assert.rejects(() => runPowerShell(`
+      $env:APPDATA = '${escapedDirectory}'
+      $env:TEST_REMINDER_HOST_NO_RUN = '1'
+      & '${escapedHostScript}' -EventPath '${escapedEventPath}' -TestNoWindow
+      exit $LASTEXITCODE
+    `));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

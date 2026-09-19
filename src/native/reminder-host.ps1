@@ -1,5 +1,7 @@
 ﻿param(
-  [string]$WorkspacePath = $env:CODEX_TASK_REMINDER_WORKSPACE
+  [string]$WorkspacePath = $env:CODEX_TASK_REMINDER_WORKSPACE,
+  [string]$EventPath,
+  [switch]$TestNoWindow
 )
 
 Add-Type -TypeDefinition @'
@@ -636,6 +638,21 @@ function Show-ReminderWindow($eventData) {
   }
 
   $window.Show()
+  return $window
+}
+
+function Read-OneTimeEvent {
+  if (-not (Test-Path -LiteralPath $EventPath)) { throw 'Event file is missing.' }
+  try {
+    $eventData = Get-Content -LiteralPath $EventPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($field in @('taskId', 'eventId', 'source', 'status', 'title', 'occurredAt')) {
+      if (-not $eventData.$field) { throw "Missing event field: $field" }
+    }
+    if ($eventData.status -notin @('completed', 'needs_input', 'needs_authorization', 'failed', 'interrupted')) { throw 'Unsupported event status.' }
+    return $eventData
+  } finally {
+    Remove-Item -LiteralPath $EventPath -Force -ErrorAction SilentlyContinue
+  }
 }
 
 function Read-NewEvents {
@@ -654,6 +671,23 @@ function Read-NewEvents {
     } catch {
       Write-Diagnostic "事件处理失败：$($_.Exception.Message)"
     }
+  }
+}
+
+if ($EventPath) {
+  try {
+    $oneTimeEvent = Read-OneTimeEvent
+    if (-not $TestNoWindow) {
+      $oneTimeWindow = Show-ReminderWindow $oneTimeEvent
+      if ($oneTimeWindow) {
+        $oneTimeWindow.Add_Closed({ [System.Windows.Threading.Dispatcher]::CurrentDispatcher.BeginInvokeShutdown([System.Windows.Threading.DispatcherPriority]::Background) }.GetNewClosure())
+        [System.Windows.Threading.Dispatcher]::Run()
+      }
+    }
+    exit 0
+  } catch {
+    Write-Diagnostic "One-time event failed: $($_.Exception.Message)"
+    exit 1
   }
 }
 
