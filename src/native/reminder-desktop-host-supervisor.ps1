@@ -3,6 +3,8 @@ param(
   [string]$AppDataPath,
   [string]$HostScript = (Join-Path $PSScriptRoot 'reminder-host.ps1'),
   [switch]$AlwaysRun,
+  [switch]$ExitWhenCodexStops,
+  [string]$CodexProcessName = 'codex',
   [int]$PollSeconds = 2
 )
 
@@ -21,7 +23,7 @@ $hostProcess = $null
 $hostArguments = "-NoProfile -STA -File `"$HostScript`" -WorkspacePath `"$WorkspacePath`""
 
 while ($true) {
-  $codexRunning = $AlwaysRun -or (@(Get-Process -Name 'codex' -ErrorAction SilentlyContinue).Count -gt 0)
+  $codexRunning = $AlwaysRun -or (@(Get-Process -Name $CodexProcessName -ErrorAction SilentlyContinue).Count -gt 0)
   $hostRunning = $hostProcess -and -not $hostProcess.HasExited
 
   if ($codexRunning -and -not $hostRunning) {
@@ -32,6 +34,8 @@ while ($true) {
     Stop-Process -Id $hostProcess.Id -ErrorAction SilentlyContinue
     $hostProcess = $null
   }
+
+  if ($ExitWhenCodexStops -and -not $codexRunning) { break }
 
   Start-Sleep -Seconds $PollSeconds
 }

@@ -15,6 +15,8 @@ const watchdogScript = join(projectPath, "src", "native", "reminder-watchdog.ps1
 const hostLauncherScript = join(projectPath, "src", "native", "reminder-host-launcher.ps1");
 const desktopHostSupervisorScript = join(projectPath, "src", "native", "reminder-desktop-host-supervisor.ps1");
 const hiddenLauncherScript = join(projectPath, "src", "native", "reminder-hidden-launcher.vbs");
+const sessionStartScript = join(projectPath, "src", "native", "reminder-session-start.ps1");
+const sessionLifecycleInstallerScript = join(projectPath, "src", "native", "install-session-lifecycle.ps1");
 
 function toPowerShellLiteral(value: string) {
   return value.replaceAll("'", "''");
@@ -250,6 +252,80 @@ test("桌面会话监督器会启动原生提醒宿主", async () => {
     assert.notEqual(Number((await readFile(markerPath, "utf8")).trim()), supervisor.pid);
   } finally {
     supervisor.kill();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("桌面会话监督器会在 Codex 退出后结束自身", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-host-exit-"));
+  const supervisor = spawn(
+    "powershell.exe",
+    ["-NoProfile", "-File", desktopHostSupervisorScript, "-WorkspacePath", directory, "-ExitWhenCodexStops", "-CodexProcessName", "codex-task-reminder-test-missing", "-PollSeconds", "1"],
+    { windowsHide: true },
+  );
+
+  try {
+    const exitCode = await Promise.race<number | null | "timeout">([
+      new Promise<number | null>((resolveExit, rejectExit) => {
+        supervisor.once("error", rejectExit);
+        supervisor.once("exit", resolveExit);
+      }),
+      new Promise<"timeout">((resolveTimeout) => setTimeout(() => resolveTimeout("timeout"), 3_000)),
+    ]);
+    assert.equal(exitCode, 0);
+  } finally {
+    supervisor.kill();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("会话启动器按需启动桌面提醒宿主", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-session-start-"));
+  const workerScript = join(directory, "test-desktop-supervisor.ps1");
+  const markerPath = join(directory, "started.txt");
+  await writeFile(
+    workerScript,
+    "param([string]$WorkspacePath, [string]$AppDataPath, [switch]$ExitWhenCodexStops)\nSet-Content -LiteralPath (Join-Path $WorkspacePath 'started.txt') -Value $PID\nStart-Sleep -Seconds 10\n",
+    "utf8",
+  );
+
+  try {
+    await execFileAsync(
+      "powershell.exe",
+      ["-NoProfile", "-File", sessionStartScript, "-WorkspacePath", directory, "-AppDataPath", directory, "-DesktopSupervisorScript", workerScript, "-HiddenLauncherScript", hiddenLauncherScript],
+      { windowsHide: true },
+    );
+    await waitFor(async () => {
+      try {
+        return (await stat(markerPath)).isFile();
+      } catch {
+        return false;
+      }
+    }, 5_000);
+    await runPowerShell(`Stop-Process -Id ${Number((await readFile(markerPath, "utf8")).trim())} -ErrorAction SilentlyContinue`);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("会话模式安装器写入 SessionStart 钩子", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "codex-task-reminder-session-install-"));
+  const hooksPath = join(directory, "hooks.json");
+  await writeFile(hooksPath, JSON.stringify({ description: "test", hooks: {} }), "utf8");
+  await writeFile(join(directory, "Codex 提醒桌面宿主.lnk"), "placeholder", "utf8");
+  const escapedInstallerScript = toPowerShellLiteral(sessionLifecycleInstallerScript);
+  const escapedDirectory = toPowerShellLiteral(directory);
+  const escapedHooksPath = toPowerShellLiteral(hooksPath);
+  const escapedStartupPath = toPowerShellLiteral(directory);
+
+  try {
+    await runPowerShell(`
+      & '${escapedInstallerScript}' -WorkspacePath '${escapedDirectory}' -HooksPath '${escapedHooksPath}' -StartupPath '${escapedStartupPath}' -TaskName 'CodexTaskReminderWatchdog-Test-${randomUUID()}'
+    `);
+    const hooks = JSON.parse(await readFile(hooksPath, "utf8"));
+    assert.equal(hooks.hooks.SessionStart[0].matcher, "startup|resume|clear");
+    assert.match(hooks.hooks.SessionStart[0].hooks[0].commandWindows, /wscript\.exe/i);
+  } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });
